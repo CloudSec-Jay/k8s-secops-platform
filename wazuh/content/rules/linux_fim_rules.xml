@@ -1,0 +1,114 @@
+<!--
+  linux_fim_rules.xml — File Integrity Monitoring detections: Linux
+  Companion: wazuh/content/tuning/linux_fim_tuning.xml — noise suppression overrides (rules 100008–100019)
+  Requires: whodata="yes" on monitored directories in agent config (fedora-config.xml)
+  Parent SIDs: 550 (checksum changed), 554 (file added), 553 (file deleted)
+
+  TEST CASES
+  Positive:
+    chmod +x /etc/cron.daily/malicious.sh        -> rule 100002
+    chmod +x /tmp/impacket_tool.py               -> rule 100007
+    echo '#!/bin/bash' > /tmp/drop.sh            -> rule 100003
+    echo "attacker ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers -> rule 100004
+    echo "ssh-rsa AAAA..." >> /root/.ssh/authorized_keys   -> rule 100005
+    echo "auth sufficient pam_permit.so" >> /etc/pam.d/su  -> rule 100006
+  Negative:
+    echo "# comment" >> /etc/profile             -> content change only, not .sh -> no 100002
+    chmod +x /usr/local/bin/legit                -> not .sh extension -> no 100002
+    touch /tmp/data.csv                          -> not .sh -> no 100003
+
+  GAPS:
+    - Does not detect chmod on non-.sh/.py executables (ELF binaries, Perl/Ruby scripts)
+    - Does not detect scripts dropped pre-set +x inside tar/zip extraction
+    - Does not correlate permission change with subsequent execution (T1059.004)
+    - Does not cover user home dirs outside /root (authorized_keys for non-root users)
+-->
+
+<group name="syscheck,fim,">
+
+  <!-- Execute permission added to shell script
+       Requires whodata="yes" for changed_fields + perm field population
+       T1222.002: File and Directory Permissions Modification: Linux/Mac -->
+  <rule id="100002" level="8">
+    <if_sid>550</if_sid>
+    <field name="file">.sh$</field>
+    <field name="changed_fields">^permission$</field>
+    <field name="perm" type="pcre2">\w\wx</field>
+    <description>Execute permission added to shell script — Inspect file origin and owning process immediately. CIS 3.3. ZT: Assume Breach.</description>
+    <mitre>
+      <id>T1222.002</id>
+    </mitre>
+    <group>fim_permission,pci_dss_11.5,</group>
+  </rule>
+
+  <!-- Shell script created in world-writable or temp directory
+       Indicator of staging activity prior to execution
+       T1059.004: Command and Scripting Interpreter: Unix Shell -->
+  <rule id="100003" level="10">
+    <if_sid>554</if_sid>
+    <field name="file" type="pcre2">^(/tmp|/var/tmp|/dev/shm)/.*\.sh$</field>
+    <description>Shell script created in temp or world-writable directory — Likely staging for execution. CIS 3.3. ZT: Assume Breach.</description>
+    <mitre>
+      <id>T1059.004</id>
+    </mitre>
+    <group>fim_staging,</group>
+  </rule>
+
+  <!-- Sudoers file or drop-in modified
+       Any change to sudo policy warrants immediate review
+       T1548.003: Abuse Elevation Control Mechanism: Sudo and Sudo Caching -->
+  <rule id="100004" level="12">
+    <if_sid>550</if_sid>
+    <field name="file" type="pcre2">^/etc/sudoers(\.d/.*)?$</field>
+    <description>Sudoers file modified — Verify change is authorized and audit new entries for NOPASSWD or ALL grants. CIS 5.3. ZT: Verify Explicitly.</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>fim_privilege,pci_dss_10.2.5,</group>
+  </rule>
+
+  <!-- SSH authorized_keys modified — persistence mechanism
+       Attacker adds own public key to maintain access
+       T1098.004: Account Manipulation: SSH Authorized Keys -->
+  <rule id="100005" level="12">
+    <if_sid>550</if_sid>
+    <field name="file" type="pcre2">authorized_keys$</field>
+    <description>SSH authorized_keys modified — Audit new key entries for unauthorized principals. CIS 5.2. ZT: Assume Breach.</description>
+    <mitre>
+      <id>T1098.004</id>
+    </mitre>
+    <group>fim_persistence,pci_dss_10.2.5,</group>
+  </rule>
+
+  <!-- PAM configuration modified
+       Attackers modify PAM to bypass authentication or harvest credentials
+       T1556.003: Modify Authentication Process: Pluggable Authentication Modules -->
+  <rule id="100006" level="12">
+    <if_sid>550</if_sid>
+    <field name="file" type="pcre2">^/etc/pam\.d/</field>
+    <description>PAM configuration modified — Review for auth bypass module (pam_permit.so) or credential harvester. CIS 5.3. ZT: Verify Explicitly.</description>
+    <mitre>
+      <id>T1556.003</id>
+    </mitre>
+    <group>fim_auth,</group>
+  </rule>
+
+
+  <!-- Execute permission added to Python script
+       Requires whodata="yes" for changed_fields + perm field population
+       T1222.002: File and Directory Permissions Modification: Linux/Mac
+       T1059.006: Command and Scripting Interpreter: Python -->
+  <rule id="100007" level="12">
+    <if_sid>550</if_sid>
+    <field name="file" type="pcre2">\.py[a-z]*$</field>
+    <field name="changed_fields">^permission$</field>
+    <field name="perm" type="pcre2">\w\wx</field>
+    <description>Execute permission added to Python script — High confidence staging indicator; Python tooling (Impacket, etc.) commonly used post-exploitation. CIS 3.3. ZT: Assume Breach.</description>
+    <mitre>
+      <id>T1222.002</id>
+      <id>T1059.006</id>
+    </mitre>
+    <group>fim_permission,pci_dss_11.5,</group>
+  </rule>
+
+  </group>

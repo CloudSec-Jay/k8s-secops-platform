@@ -1,0 +1,22 @@
+<agent_config os="Ubuntu">
+  <!-- Security Configuration Assessment (CIS Hardening) -->
+  <sca>
+  <enabled>yes</enabled>
+    <scan_on_start>yes</scan_on_start>
+    <interval>12h</interval>
+    <policies>
+      <policy>sca/cis_ubuntu22-04.yml</policy>
+    </policies>
+  </sca>
+
+  <!-- File Integrity Monitoring (FIM) -->
+  <syscheck>
+    <disabled>no</disabled>
+    <frequency>43200</frequency>
+    <directories check_all="yes" realtime="yes">/etc,/root</directories>
+    <directories check_all="yes">/usr/bin,/usr/sbin,/bin,/sbin</directories>
+    <ignore>/etc/mtab</ignore>
+    <ignore>/etc/mnttab</ignore>
+  </syscheck>
+
+</agent_config>

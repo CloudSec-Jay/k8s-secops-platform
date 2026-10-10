@@ -1,0 +1,11 @@
+.cache/
+.env
+*.kubeconfig
+*.key
+*.pem
+*.p12
+*.crt
+secrets/
+vendor/
+__pycache__/
+.DS_Store

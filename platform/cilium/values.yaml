@@ -1,0 +1,32 @@
+kubeProxyReplacement: true
+
+operator:
+  replicas: 1
+
+hubble:
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+  metrics:
+    enabled:
+      - dns
+      - drop
+      - flow
+      - httpV2
+      - icmp
+      - port-distribution
+      - tcp
+
+ipam:
+  mode: kubernetes
+
+rollOutCiliumPods: true
+
+securityContext:
+  privileged: false
+
+cgroup:
+  autoMount:
+    enabled: true
+  hostRoot: /run/cilium/cgroupv2

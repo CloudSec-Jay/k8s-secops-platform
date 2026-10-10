@@ -1,0 +1,53 @@
+<!--
+  linux_fim_tuning.xml — FIM noise suppression: Linux
+  Purpose: lower-level overrides for expected OS/application churn that would otherwise
+           flood dashboards and bury real detections.
+
+  These are NOT detections. Each rule here must have a documented reason why the path
+  is expected noise and NOT a persistence/staging vector.
+
+  Parent SIDs: 550 (checksum changed), 553 (file deleted), 554 (file added)
+
+  Rule ID range: 100008–100019 (FIM tuning block)
+-->
+
+<group name="syscheck,fim,fim_tuning,">
+
+  <!-- systemd runtime property overrides
+       Written by: systemctl set-property / systemd cgroup accounting
+       Path: /etc/systemd/system.control/<unit>.d/50-<property>.conf
+       Why not persistence: attackers target /etc/systemd/system/ for unit file drops,
+       not system.control/ which is a transient runtime override directory.
+       Level 3 (info): visible in full audit view, filtered from alert dashboards -->
+  <rule id="100008" level="3">
+    <if_sid>550,554</if_sid>
+    <field name="file" type="pcre2">^/etc/systemd/system\.control/</field>
+    <description>systemd runtime property override written — expected OS behavior, not a persistence indicator.</description>
+  </rule>
+
+  <!-- lttng-ust shared memory objects
+       Written by: applications instrumented with lttng-ust (Firefox, GNOME, etc.)
+       Path: /dev/shm/lttng-ust-wait-<pid> and /dev/shm/lttng-ust-wait-<pid>-<tid>
+       Why not persistence: /dev/shm is tmpfs (cleared on reboot); lttng objects are
+       process-lifetime rendezvous points, not execution vectors.
+       Rule 100003 still fires on .sh scripts in /dev/shm — this only suppresses lttng objects.
+       Level 2 (debug): kept for completeness, not surfaced in any standard view -->
+  <rule id="100009" level="2">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/dev/shm/lttng-ust-</field>
+    <description>lttng-ust shared memory object — expected tracing subsystem lifecycle event.</description>
+  </rule>
+
+  <!-- Firefox session lock files
+       Written by: Firefox on launch (/tmp/org.mozilla.firefox/lock, .parentlock)
+       Path: /tmp/org.mozilla.firefox/
+       Why not persistence: /tmp is world-writable but these are well-known browser PID
+       lock files, not script drops. Rule 100003 still fires on .sh files in /tmp.
+       Level 2 (debug): kept for completeness, not surfaced in any standard view -->
+  <rule id="100010" level="2">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/tmp/org\.mozilla\.firefox/</field>
+    <description>Firefox session lock file — expected browser lifecycle event.</description>
+  </rule>
+
+</group>

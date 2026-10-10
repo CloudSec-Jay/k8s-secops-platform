@@ -1,0 +1,41 @@
+<!-- Add to /var/ossec/etc/rules/local_rules.xml on the manager -->
+
+<group name="syscheck,virustotal,pci_dss_11.5,nist_800_53_SI.7,">
+
+  <rule id="100200" level="7">
+    <if_sid>550</if_sid>
+    <field name="file">/root</field>
+    <description>File modified in /root directory.</description>
+    <mitre>
+      <id>T1565.001</id>
+    </mitre>
+  </rule>
+
+  <rule id="100201" level="7">
+    <if_sid>554</if_sid>
+    <field name="file">/root</field>
+    <description>File added to /root directory.</description>
+    <mitre>
+      <id>T1204.002</id>
+    </mitre>
+  </rule>
+
+  <rule id="100092" level="12">
+    <if_sid>657</if_sid>
+    <match>Successfully removed threat</match>
+    <description>$(parameters.program) removed threat located at $(parameters.alert.data.virustotal.source.file)</description>
+    <mitre>
+      <id>T1204.002</id>
+    </mitre>
+  </rule>
+
+  <rule id="100093" level="12">
+    <if_sid>657</if_sid>
+    <match>Error removing threat</match>
+    <description>Error removing threat located at $(parameters.alert.data.virustotal.source.file)</description>
+    <mitre>
+      <id>T1204.002</id>
+    </mitre>
+  </rule>
+
+</group>
