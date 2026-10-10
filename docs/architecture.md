@@ -6,7 +6,7 @@
 - **Kubernetes layer:** kubeadm control plane, worker scheduling, RBAC, namespaces, Secrets, and StatefulSets.
 - **Network layer:** Cilium CNI, kube-proxy replacement, policy enforcement, and Hubble flow telemetry.
 - **Security operations layer:** Wazuh managers, indexer, dashboard, endpoint agents, custom detections, and response runbooks.
-- **External policy layer:** Project 07 policy-as-code remains in the Cloud Operations repository.
+- **External policy layer:** Project 06 policy-as-code remains in the Cloud Operations repository.
 
 ## Trust boundaries
 

@@ -1,6 +1,6 @@
 # Kubernetes SecOps Platform
 
-A self-hosted security lab that combines the former Cloud Operations Project 03 Wazuh work with Project 05 Kubernetes platform work. The target is a multi-VM Kubernetes cluster bootstrapped with `kubeadm`, networked and observed with Cilium, and running the upstream Wazuh Kubernetes deployment.
+A self-hosted security lab that consolidates the former Wazuh operations and Kubernetes platform work as Project 03. The target is a multi-VM Kubernetes cluster bootstrapped with `kubeadm`, networked and observed with Cilium, and running the upstream Wazuh Kubernetes deployment.
 
 ## Architecture
 
@@ -46,7 +46,7 @@ Linux endpoints / Kubernetes nodes
 
 - No Minikube workflow is included; this lab targets VMs managed with `kubeadm`.
 - No Docker Compose or Podman Quadlet Wazuh runtime is included.
-- Policy-as-code remains in [Cloud Operations Project 07](https://github.com/CloudSec-Jay/cloud-ops-engineering/tree/main/security/policy-as-code) and is linked rather than duplicated.
+- Policy-as-code remains in [Cloud Operations Project 06](https://github.com/CloudSec-Jay/cloud-ops-engineering/tree/main/security/policy-as-code) and is linked rather than duplicated.
 - Upstream Wazuh Kubernetes manifests are staged at deployment time instead of copied into this repository. This keeps the vendor boundary and version pin explicit.
 - Active-response files are prototypes. They are not enabled by the platform deployment.
 
