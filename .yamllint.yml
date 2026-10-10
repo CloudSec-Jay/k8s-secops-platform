@@ -1,6 +1,10 @@
 ---
 extends: default
+ignore: |
+  wazuh/content/sca/fedora/cis_fedora_custom.yaml
 rules:
+  comments:
+    min-spaces-from-content: 1
   document-start: disable
   line-length:
     max: 160
