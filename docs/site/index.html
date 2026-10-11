@@ -3,88 +3,116 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kubernetes SecOps Platform · Jason Tribble</title>
-  <meta name="description" content="Jason Tribble's self-hosted kubeadm security lab combining Cilium network boundaries, Hubble observability, and Wazuh detection engineering.">
+  <meta name="description" content="A self-hosted Kubernetes SecOps case study using kubeadm, Cilium, Hubble, and Wazuh.">
+  <meta name="theme-color" content="#f5efe1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
   <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Kubernetes SecOps — Cloud Operations Engineering</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&amp;family=JetBrains+Mono:wght@400;500&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <a class="skip" href="#main">Skip to content</a>
+  <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header">
-    <a class="brand" href="https://cloudsec-jay.github.io/cloud-ops-engineering/"><span class="dot" aria-hidden="true"></span>Jason Tribble</a>
-    <nav aria-label="Main navigation"><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/">Overview</a><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/library.html">Library</a><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/roadmap.html">Roadmap</a><a href="https://medium.com/@cloudsec-jay">Blog ↗</a></nav>
-    <a class="header-link" href="https://cloudsec-jay.github.io/cloud-ops-engineering/contact.html">Contact →</a>
+    <a class="brand" href="https://cloudsec-jay.github.io/cloud-ops-engineering/"><span class="dot" aria-hidden="true"></span>Jason Tribble.</a>
+    <nav aria-label="Project navigation">
+      <a href="https://cloudsec-jay.github.io/cloud-ops-engineering/">Overview</a>
+      <a href="https://cloudsec-jay.github.io/cloud-ops-engineering/#project-sites">Projects</a>
+      <a href="./" aria-current="page">Kubernetes SecOps</a>
+    </nav>
+    <a class="header-link" href="https://github.com/CloudSec-Jay/k8s-secops-platform">Source ↗</a>
   </header>
 
-  <main id="main">
-    <section class="hero">
-      <div class="hero-left">
-        <p class="eyebrow">03 / Kubernetes SecOps</p>
-        <h1>Self-hosted<br><em>security.</em></h1>
-        <div class="actions"><a class="button dark" href="#architecture">Explore the system <span aria-hidden="true">↓</span></a><a class="button" href="https://github.com/CloudSec-Jay/k8s-secops-platform">View GitHub ↗</a></div>
-      </div>
-      <div class="hero-right">
-        <p class="eyebrow">kubeadm / Cilium / Wazuh</p>
-        <p class="pitch">Own the cluster.<br>Observe the boundary.<br><em>Detect with context.</em></p>
-        <p class="intro">A VM-based Kubernetes lab where network enforcement, security telemetry, and recovery are designed as one operating system—not disconnected demos.</p>
-        <div class="hero-note"><span class="dot" aria-hidden="true"></span>Implementation-ready. Target-cluster evidence pending.</div>
-      </div>
-    </section>
-
-    <section class="expertise" aria-label="Platform layers">
-      <div><span class="eyebrow">01 / Platform</span><h2>Visible<br> foundations</h2><p>Linux VMs, container runtime, kubeadm lifecycle, storage, and failure domains remain explicit.</p><span class="stack">VMs · kubeadm · containerd</span></div>
-      <div><span class="eyebrow">02 / Network</span><h2>Enforced<br> boundaries</h2><p>Cilium controls workload communication while Hubble exposes flows and policy decisions.</p><span class="stack">Cilium · eBPF · Hubble</span></div>
-      <div><span class="eyebrow">03 / Detection</span><h2>Actionable<br> signals</h2><p>Wazuh joins host telemetry to reviewed rules, tuning decisions, and operator runbooks.</p><span class="stack">Wazuh · FIM · SCA</span></div>
-    </section>
-
-    <div class="skills-strip"><span class="eyebrow">System path</span><p>Endpoint <span> / </span> Wazuh manager <span> / </span> Indexer <span> / </span> Dashboard <span> / </span> Response</p></div>
-
-    <section class="about"><p class="eyebrow">The design</p><p>The lab consolidates Kubernetes platform engineering and Wazuh detection work into one project. <em>Minikube and container-only Wazuh paths are deliberately outside the architecture.</em></p></section>
-
-    <section class="section architecture" id="architecture">
-      <div class="section-heading"><div><p class="eyebrow">Architecture / Trust boundaries</p><h2>From endpoint to evidence.</h2></div><a class="text-link" href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/docs/architecture.md">Read the architecture ↗</a></div>
-      <div class="architecture-map" role="img" aria-label="Linux endpoints send events to the Wazuh manager, indexer, and dashboard in a Cilium-networked kubeadm cluster backed by persistent storage.">
-        <div class="system-node"><span class="eyebrow">Monitored boundary</span><h3>Linux endpoints</h3><p>FIM · SCA · system logs</p></div>
-        <div class="system-link"><span>1514 / 1515</span></div>
-        <div class="cluster-boundary">
-          <div class="boundary-title"><span class="eyebrow">kubeadm cluster</span><span class="stack">Cilium policy · Hubble flows</span></div>
-          <div class="cluster-flow">
-            <div class="system-node"><span class="eyebrow">Ingest</span><h3>Manager</h3><p>Rules · decoders · response</p></div>
-            <span class="flow-arrow" aria-hidden="true">→</span>
-            <div class="system-node"><span class="eyebrow">Persist</span><h3>Indexer</h3><p>Searchable security data</p></div>
-            <span class="flow-arrow" aria-hidden="true">→</span>
-            <div class="system-node"><span class="eyebrow">Operate</span><h3>Dashboard</h3><p>Triage · investigation</p></div>
-          </div>
-          <p class="storage-boundary">CSI-backed persistent storage / backup and restore boundary</p>
+  <main id="content">
+    <div class="breadcrumb"><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/#project-sites">Cloud Operations</a><span>/</span><span>Field Project 02</span><span>/</span>Kubernetes SecOps</div>
+    <article>
+      <header class="project-header">
+        <div class="project-title">
+          <p class="overline">02 / Cloud Operations field project</p>
+          <h1>Kubernetes<br><em>SecOps.</em></h1>
+          <p class="lede">A self-hosted security lab that treats network policy, flow visibility, detection content, and recovery as one operating system.</p>
         </div>
-      </div>
-    </section>
+        <dl class="project-facts">
+          <div><dt>Platform</dt><dd>Linux VMs · kubeadm</dd></div>
+          <div><dt>Network</dt><dd>Cilium · Hubble</dd></div>
+          <div><dt>Detection</dt><dd>Wazuh</dd></div>
+          <div><dt>Storage</dt><dd>CSI-backed persistence</dd></div>
+          <div><dt>Status</dt><dd><span class="status-dot"></span>Evidence pending</dd></div>
+        </dl>
+      </header>
 
-    <section class="section" id="controls">
-      <div class="section-heading"><div><p class="eyebrow">Controls / Source available</p><h2>Security that can be checked.</h2></div><a class="text-link" href="https://github.com/CloudSec-Jay/k8s-secops-platform">Browse the repository ↗</a></div>
-      <div class="project-grid">
-        <a class="project-card" href="https://github.com/CloudSec-Jay/k8s-secops-platform/tree/main/platform/cilium"><div class="card-top"><span class="eyebrow">Network</span><span aria-hidden="true">↗</span></div><h3>Default-deny foundation</h3><p>Cilium policies begin from isolation, retain DNS deliberately, and require observed workload flows before broader allows.</p><span class="status">Policy source</span><span class="stack">Cilium · Hubble · DNS</span></a>
-        <a class="project-card" href="https://github.com/CloudSec-Jay/k8s-secops-platform/tree/main/wazuh/content"><div class="card-top"><span class="eyebrow">Detection</span><span aria-hidden="true">↗</span></div><h3>Portable Wazuh content</h3><p>Custom FIM rules, SCA material, endpoint configuration, tuning notes, and response runbooks move with the platform.</p><span class="status">Review before deployment</span><span class="stack">Rules · SCA · Runbooks</span></a>
-        <a class="project-card" href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/wazuh/platform/README.md"><div class="card-top"><span class="eyebrow">Supply chain</span><span aria-hidden="true">↗</span></div><h3>Pinned upstream boundary</h3><p>Wazuh Kubernetes is staged from a reviewed tag. Generated certificates, credentials, and vendor trees stay out of Git.</p><span class="status">Version pinned</span><span class="stack">Kustomize · TLS · Secrets</span></a>
-        <a class="project-card" href="https://github.com/CloudSec-Jay/cloud-ops-engineering/tree/main/security/policy-as-code"><div class="card-top"><span class="eyebrow">Project 06 / Governance</span><span aria-hidden="true">↗</span></div><h3>Policy stays independent</h3><p>OPA and other policy-as-code remain in the Cloud Operations repository, avoiding a copied policy set that silently drifts.</p><span class="status">Canonical policy source</span><span class="stack">OPA · Guardrails · Validation</span></a>
-      </div>
-    </section>
+      <section class="summary" aria-labelledby="summary-title">
+        <h2 id="summary-title">The brief</h2>
+        <div class="prose">
+          <p>The goal is not simply to make Wazuh pods healthy. The system needs an explainable path from a Linux endpoint, through a controlled network boundary, into searchable evidence and an operator response.</p>
+          <p>This repository joins the kubeadm platform, Cilium policy, Hubble visibility, portable Wazuh content, and recovery guidance without hiding the work that still needs target-cluster validation.</p>
+        </div>
+      </section>
 
-    <section class="proof">
-      <div><p class="eyebrow">Definition of done</p><h2>Healthy pods are the start, not the proof.</h2></div>
-      <div><p>The lab is proven only after an endpoint enrolls, a harmless event becomes a searchable alert, a component restarts without losing state, and the system can be restored from documented backups.</p><ol class="evidence-list"><li><span>01</span>Cluster and Cilium health</li><li><span>02</span>Endpoint enrollment and ingestion</li><li><span>03</span>Detection and runbook validation</li><li><span>04</span>Persistence and recovery exercise</li></ol></div>
-    </section>
+      <section class="project-section architecture-section" aria-labelledby="architecture-title">
+        <div class="section-heading"><p>01</p><h2 id="architecture-title">The signal path</h2></div>
+        <div class="signal-map" role="img" aria-label="Linux endpoints send events into a Cilium-networked kubeadm cluster containing the Wazuh manager, indexer, and dashboard.">
+          <div class="outside-zone">
+            <p class="map-label">MONITORED BOUNDARY</p>
+            <div class="map-node"><span>Origin</span><strong>Linux endpoints</strong><small>FIM · SCA · system logs</small></div>
+          </div>
+          <div class="ingest-line"><span>1514 / 1515</span><i></i></div>
+          <div class="cluster-zone">
+            <div class="zone-head"><p class="map-label">KUBEADM TRUST ZONE</p><span>Cilium policy · Hubble flows</span></div>
+            <div class="cluster-flow">
+              <div class="map-node"><span>Ingest</span><strong>Manager</strong><small>Rules · decoders</small></div><b aria-hidden="true">→</b>
+              <div class="map-node"><span>Retain</span><strong>Indexer</strong><small>Security data</small></div><b aria-hidden="true">→</b>
+              <div class="map-node"><span>Operate</span><strong>Dashboard</strong><small>Triage · investigate</small></div>
+            </div>
+            <p class="storage-line">Persistent evidence / backup and restore boundary</p>
+          </div>
+        </div>
+        <div class="prose architecture-copy">
+          <p>Cilium starts from isolation and preserves DNS deliberately. Hubble exposes the resulting flows so policy can be built from observed behavior instead of assumptions.</p>
+          <p>Wazuh receives endpoint events, applies reviewed rules and decoders, retains searchable security data, and gives the operator a place to investigate.</p>
+        </div>
+      </section>
 
-    <section class="next"><p class="eyebrow">Continue exploring</p><h2>See the platform source.</h2><p>The repository includes the kubeadm deployment path, Cilium configuration, migrated Wazuh content, operations guidance, and validation workflow.</p><div class="actions"><a class="button dark" href="https://github.com/CloudSec-Jay/k8s-secops-platform">Open the repository ↗</a><a class="button" href="https://cloudsec-jay.github.io/cloud-ops-engineering/">Return to Cloud Operations ←</a></div></section>
+      <section class="project-section" aria-labelledby="controls-title">
+        <div class="section-heading"><p>02</p><h2 id="controls-title">Controls with provenance</h2></div>
+        <div class="control-matrix">
+          <a href="https://github.com/CloudSec-Jay/k8s-secops-platform/tree/main/platform/cilium"><span>A / NETWORK</span><h3>Default-deny foundation</h3><p>Workload communication begins isolated. DNS and application flows are opened deliberately from observed requirements.</p><strong>Policy source ↗</strong></a>
+          <a href="https://github.com/CloudSec-Jay/k8s-secops-platform/tree/main/wazuh/content"><span>B / DETECTION</span><h3>Portable Wazuh content</h3><p>FIM rules, SCA material, endpoint configuration, tuning notes, and response runbooks live with the platform.</p><strong>Review first ↗</strong></a>
+          <a href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/wazuh/platform/README.md"><span>C / SUPPLY CHAIN</span><h3>Pinned upstream boundary</h3><p>Wazuh Kubernetes is staged from a reviewed tag while generated credentials and vendor trees stay outside Git.</p><strong>Version pinned ↗</strong></a>
+          <a href="https://github.com/CloudSec-Jay/cloud-ops-engineering/tree/main/security/policy-as-code"><span>D / GOVERNANCE</span><h3>One policy source</h3><p>OPA remains canonical in Cloud Operations, preventing a copied ruleset here from drifting silently.</p><strong>Shared control ↗</strong></a>
+        </div>
+      </section>
+
+      <section class="project-section" aria-labelledby="evidence-title">
+        <div class="section-heading"><p>03</p><h2 id="evidence-title">Evidence before confidence</h2></div>
+        <div class="evidence-path">
+          <div><span>01</span><h3>Establish health</h3><p>Confirm kubeadm, Cilium, and the required platform components.</p><em>Pending</em></div>
+          <div><span>02</span><h3>Enroll an endpoint</h3><p>Verify authenticated ingestion into the Wazuh manager.</p><em>Pending</em></div>
+          <div><span>03</span><h3>Generate evidence</h3><p>Turn a harmless test event into a searchable, explainable alert.</p><em>Pending</em></div>
+          <div><span>04</span><h3>Exercise recovery</h3><p>Restart components and restore state from documented backups.</p><em>Pending</em></div>
+        </div>
+      </section>
+
+      <section class="project-section current-state" aria-labelledby="state-title">
+        <div class="section-heading"><p>04</p><h2 id="state-title">Current state</h2></div>
+        <div class="state-layout">
+          <p class="state-callout">Implementation-ready.<br><em>Evidence still required.</em></p>
+          <div class="prose"><p>The repository includes the deployment path, Cilium configuration, migrated Wazuh content, operational guidance, and validation workflow.</p><p>The next meaningful step is target-cluster execution: enroll an endpoint, verify the complete signal path, test a safe detection, then exercise persistence and recovery. Until then, the page describes source and design—not production proof.</p></div>
+        </div>
+      </section>
+
+      <footer class="project-footer">
+        <div><p class="overline">Repository</p><h2>Inspect the platform</h2></div>
+        <div class="footer-actions"><a class="primary-link" href="https://github.com/CloudSec-Jay/k8s-secops-platform">View on GitHub ↗</a><a href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/docs/architecture.md">Read the architecture ↗</a></div>
+      </footer>
+    </article>
   </main>
 
-  <footer>
-    <div><a class="brand" href="https://cloudsec-jay.github.io/cloud-ops-engineering/">Jason Tribble.</a><p>Cloud operations. Built with intent.</p></div>
-    <div class="footer-links"><a href="https://github.com/CloudSec-Jay/k8s-secops-platform">Project source ↗</a><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/">Portfolio overview ←</a><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/contact.html">Contact →</a><a href="https://www.credly.com/users/jason-tribble">Credentials ↗</a></div>
+  <footer class="site-footer">
+    <div><a class="brand" href="https://cloudsec-jay.github.io/cloud-ops-engineering/"><span class="dot" aria-hidden="true"></span>Jason Tribble.</a><p>Cloud operations. Built with intent.</p></div>
+    <div class="site-footer-links"><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/">Portfolio</a><a href="https://github.com/CloudSec-Jay/k8s-secops-platform">Source</a><a href="#content">Back to top ↑</a></div>
   </footer>
 </body>
 </html>
