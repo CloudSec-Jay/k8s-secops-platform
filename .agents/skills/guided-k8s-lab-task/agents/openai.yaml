@@ -1,0 +1,3 @@
+interface:
+  display_name: "Guided K8s Lab Task"
+  short_description: "Teach and validate one Kubernetes lab task"
