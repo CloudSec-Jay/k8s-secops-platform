@@ -17,21 +17,32 @@ ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 HTML_LINK = re.compile(r"(?:href|src)=[\"']([^\"']+)[\"']")
+EXCLUDED_PARTS = {".cache", ".git", "kubernetes-the-hard-way"}
 
 
 def error(message: str) -> None:
     ERRORS.append(message)
 
 
+def repository_files(pattern: str) -> list[Path]:
+    return [
+        path
+        for path in ROOT.rglob(pattern)
+        if not EXCLUDED_PARTS.intersection(path.relative_to(ROOT).parts)
+    ]
+
+
 def validate_required_files() -> None:
     required = (
         "README.md",
+        "DEPENDENCIES.md",
         "versions.env",
         "platform/kubeadm/README.md",
         "platform/cilium/values.yaml",
-        "wazuh/platform/README.md",
+        "platform/wazuh/README.md",
         "wazuh/content/README.md",
         "docs/site/index.html",
+        "scripts/stage-wazuh-platform.sh",
     )
     for relative in required:
         if not (ROOT / relative).is_file():
@@ -39,14 +50,14 @@ def validate_required_files() -> None:
 
 
 def validate_structured_files() -> None:
-    for path in ROOT.rglob("*.xml"):
+    for path in repository_files("*.xml"):
         try:
             ET.parse(path)
         except ET.ParseError as exc:
             error(f"invalid XML: {path.relative_to(ROOT)}: {exc}")
 
     for suffix in ("*.yaml", "*.yml"):
-        for path in ROOT.rglob(suffix):
+        for path in repository_files(suffix):
             try:
                 list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
             except yaml.YAMLError as exc:
@@ -65,7 +76,7 @@ def local_target(source: Path, raw_target: str) -> Path | None:
 
 
 def validate_links() -> None:
-    for path in ROOT.rglob("*.md"):
+    for path in repository_files("*.md"):
         text = path.read_text(encoding="utf-8")
         for target in MARKDOWN_LINK.findall(text):
             resolved = local_target(path, target)
@@ -81,17 +92,9 @@ def validate_links() -> None:
 
 
 def validate_boundaries() -> None:
-    canonical = [
-        ROOT / "README.md",
-        ROOT / "platform",
-        ROOT / "wazuh/platform",
-    ]
+    canonical = [ROOT / "README.md", ROOT / "platform"]
     banned = re.compile(r"\b(minikube|quadlet|docker[ -]compose)\b", re.IGNORECASE)
-    allowed_context = {
-        ROOT / "README.md",
-        ROOT / "AGENTS.md",
-        ROOT / "wazuh/content/README.md",
-    }
+    allowed_context = {ROOT / "README.md", ROOT / "AGENTS.md"}
     for item in canonical:
         paths = [item] if item.is_file() else [p for p in item.rglob("*") if p.is_file()]
         for path in paths:
@@ -113,9 +116,7 @@ def validate_boundaries() -> None:
 
 
 def validate_shell() -> None:
-    scripts = [ROOT / "scripts/stage-wazuh-platform.sh"]
-    scripts.extend((ROOT / "wazuh/content").rglob("*.sh"))
-    for path in scripts:
+    for path in repository_files("*.sh"):
         result = subprocess.run(
             ["bash", "-n", str(path)],
             check=False,

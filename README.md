@@ -29,7 +29,7 @@ Linux endpoints / Kubernetes nodes
 | [`platform/kubeadm/`](platform/kubeadm/README.md) | VM prerequisites and kubeadm bootstrap sequence |
 | [`platform/cilium/`](platform/cilium/README.md) | Pinned Cilium values, network boundaries, and Hubble validation |
 | [`platform/manifests/`](platform/manifests/) | Namespace and baseline Kubernetes manifests |
-| [`wazuh/platform/`](wazuh/platform/README.md) | Upstream Wazuh Kubernetes deployment runbook for the VM cluster |
+| [`platform/wazuh/`](platform/wazuh/README.md) | Upstream Wazuh Kubernetes deployment runbook for the VM cluster |
 | [`wazuh/content/`](wazuh/content/README.md) | Migrated endpoint configs, rules, SCA content, integrations, and runbooks |
 | [`docs/site/`](docs/site/index.html) | GitHub Pages project site |
 
@@ -39,7 +39,7 @@ Linux endpoints / Kubernetes nodes
 2. Bootstrap the cluster with [`platform/kubeadm/README.md`](platform/kubeadm/README.md).
 3. Install Cilium using [`platform/cilium/values.yaml`](platform/cilium/values.yaml) and verify Hubble connectivity.
 4. Install a CSI-backed default `StorageClass`; Wazuh's StatefulSets require persistent volumes.
-5. Follow [`wazuh/platform/README.md`](wazuh/platform/README.md) to stage the pinned upstream Wazuh manifests, generate certificates, replace default credentials, and deploy.
+5. Follow [`platform/wazuh/README.md`](platform/wazuh/README.md) to stage the pinned upstream Wazuh manifests, generate certificates, replace default credentials, and deploy.
 6. Apply migrated Wazuh content only after testing it with representative positive and negative events.
 
 ## Deliberate boundaries
@@ -63,6 +63,7 @@ These checks validate local links, XML/YAML syntax where the standard library ca
 
 ## Documentation
 
+- Deployment prerequisites and dependency order: [`DEPENDENCIES.md`](DEPENDENCIES.md)
 - Project site: <https://cloudsec-jay.github.io/k8s-secops-platform/>
 - Source: <https://github.com/CloudSec-Jay/k8s-secops-platform>
 - Operations and limitations: [`docs/operations.md`](docs/operations.md)

@@ -70,7 +70,7 @@ Agent traffic typically needs separate enrollment and event endpoints. Bind them
 
 ## 7. Load custom content
 
-Review [`../content/README.md`](../content/README.md) before placing any file in a manager or agent. Test rules with Wazuh tooling and representative benign/malicious samples; validate active-response safety separately.
+Review [`../../wazuh/content/README.md`](../../wazuh/content/README.md) before placing any file in a manager or agent. Test rules with Wazuh tooling and representative benign/malicious samples; validate active-response safety separately.
 
 ## 8. Prove the deployment
 

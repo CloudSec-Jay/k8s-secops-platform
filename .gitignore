@@ -7,5 +7,8 @@
 *.crt
 secrets/
 vendor/
+kubernetes-the-hard-way/
+scripts/machines.txt
+scripts/k8s-lab.ini
 __pycache__/
 .DS_Store
