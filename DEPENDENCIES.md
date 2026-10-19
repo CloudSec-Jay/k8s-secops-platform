@@ -53,25 +53,26 @@ for the host and Wazuh data growth.
 Run [`scripts/check-host.sh`](scripts/check-host.sh) to inspect CPU virtualization,
 memory, disk space, the libvirt network, and the libvirt service.
 
-The VM provisioning path in
-[`scripts/create-kvm-cluster-vms.sh`](scripts/create-kvm-cluster-vms.sh) requires:
+VMs are provisioned by Terraform in [`terraform/`](terraform/README.md), which
+runs on the workstation and drives libvirt on the host over SSH. The host
+requires:
 
 | Command or resource | Purpose | Ubuntu package or source |
 |---|---|---|
-| `virsh` | Manage libvirt networks and domains | `libvirt-clients` |
-| `virt-install` | Define and start each VM | `virtinst` |
-| `qemu-img` | Create qcow2 overlay disks | `qemu-utils` |
-| `cloud-localds` | Build cloud-init seed images | `cloud-image-utils` |
-| `sha256sum` | Verify the pinned cloud image | `coreutils` |
-| `sudo` | Perform scoped system libvirt operations | `sudo` |
-| SSH public key | Provide key-only VM access | User-managed; never commit the private key |
-| Ubuntu 24.04 cloud image | Backing image for all three VMs | Pinned filename and SHA-256 in the script |
+| `libvirtd` with QEMU/KVM | Run the VMs | `libvirt-daemon-system`, `qemu-system-x86` |
+| `virsh` | Inspect libvirt pools, networks, and domains | `libvirt-clients` |
+| `sshd` | Accept the provider's key-based SSH connection | `openssh-server` |
+| Account in the `libvirt` group | Manage `qemu:///system` without interactive `sudo` | User-managed |
 | Active libvirt network | Give the VMs addressability | Default name: `default` |
+| Active libvirt storage pool | Hold the base image and VM disks | Default name: `default` |
+
+The workstation additionally needs Terraform and the pinned Ubuntu 24.04 cloud
+image; see the Terraform README for the image path, SHA-256, and SSH keys.
 
 Package names above are for an Ubuntu host. On another distribution, install
 the packages that provide the same commands rather than copying those names.
 
-The provisioning script assigns 4 GiB to the control plane and 8 GiB to each
+The Terraform node map assigns 4 GiB to the control plane and 8 GiB to each
 worker, matching the reference starting point. Measure memory pressure and
 indexing latency before increasing event volume.
 
@@ -175,10 +176,14 @@ prototypes until they receive a safety review and test coverage.
 
 ## 6. Repository validation dependencies
 
-Repository validation requires Python 3 and Bash. Before a pull request, run:
+Repository validation runs through [pre-commit](https://pre-commit.com), with hook
+versions pinned in `.pre-commit-config.yaml`. pre-commit installs the linters itself;
+only Terraform must be installed separately. Set it up once per clone:
 
 ```bash
-python3 scripts/validate_repo.py
+pipx install pre-commit==4.6.2
+pre-commit install          # once per clone: runs the hooks on every git commit
+pre-commit run --all-files  # optional: check everything now
 ```
 
 Then run the narrow syntax or runtime checks relevant to every changed script,

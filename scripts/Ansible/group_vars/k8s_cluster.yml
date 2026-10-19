@@ -1,0 +1,13 @@
+---
+# Shared settings for every node in k8s_cluster, loaded automatically by
+# Ansible. Keep versions aligned with the reviewed pins in ../../../versions.env.
+kubernetes_minor: "v1.37"
+kubernetes_version: "v1.37.1"
+cilium_version: "1.20.2"
+
+# Must not overlap the node network (192.168.100.0/24) or the home LAN.
+pod_subnet: "10.244.0.0/16"
+service_subnet: "10.96.0.0/12"
+
+# Fixed control-plane address from terraform/locals.tf.
+control_plane_endpoint: "192.168.100.10:6443"

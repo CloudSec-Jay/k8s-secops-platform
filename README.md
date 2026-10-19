@@ -55,11 +55,12 @@ Linux endpoints / Kubernetes nodes
 Run the repository checks before opening a pull request:
 
 ```bash
-python3 scripts/validate_repo.py
-bash -n scripts/stage-wazuh-platform.sh
+pipx install pre-commit==4.6.2
+pre-commit install          # once per clone: runs the hooks on every git commit
+pre-commit run --all-files  # optional: check everything now
 ```
 
-These checks validate local links, XML/YAML syntax where the standard library can do so, executable shell syntax, and the absence of banned legacy deployment references in the canonical platform path. Runtime validation still requires the target VM cluster.
+The hooks are defined in `.pre-commit-config.yaml`, and CI runs the same hooks on every push and pull request. They check XML and YAML syntax, whitespace, Ansible best practices, and Terraform formatting and configuration. Runtime validation still requires the target VM cluster.
 
 ## Documentation
 

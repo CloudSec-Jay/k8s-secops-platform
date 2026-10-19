@@ -19,9 +19,7 @@ The former Minikube, Docker listener, and Podman Quadlet paths were intentionall
 
 ## Validation
 
-```bash
-python3 scripts/validate_repo.py
-```
+CI checks that every XML file under `wazuh/` and `platform/` is well-formed (see `.github/workflows/validate.yml`).
 
 Generic XML parsing is only a syntax check. Wazuh configuration can contain fragments whose runtime validity depends on Wazuh decoders, parent rules, and field names. Use Wazuh's rule test and configuration tools before deployment.
 

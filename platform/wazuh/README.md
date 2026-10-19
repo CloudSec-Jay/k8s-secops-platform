@@ -4,11 +4,17 @@ The platform deploys Wazuh from the official `wazuh/wazuh-kubernetes` repository
 
 ## 1. Stage the reviewed upstream release
 
+From the repository root, clone the pinned `WAZUH_VERSION` tag from [`versions.env`](../../versions.env) into the ignored `.cache/` directory:
+
 ```bash
-scripts/stage-wazuh-platform.sh
+source versions.env
+git clone --branch "${WAZUH_VERSION}" --depth 1 \
+  https://github.com/wazuh/wazuh-kubernetes.git \
+  ".cache/wazuh-kubernetes-${WAZUH_VERSION}"
+git -C ".cache/wazuh-kubernetes-${WAZUH_VERSION}" describe --tags --exact-match
 ```
 
-The script clones the `WAZUH_VERSION` tag from [`versions.env`](../../versions.env) into the ignored `.cache/` directory. Review upstream release notes and diff the staged tree before changing the pin.
+The last command must print the pinned tag. Review upstream release notes and diff the staged tree before changing the pin.
 
 ## 2. Satisfy storage first
 

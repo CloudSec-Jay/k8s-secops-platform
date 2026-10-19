@@ -25,7 +25,7 @@
 
 ## 4. Repository Map
 * **KTHW learning path:** `scripts/KTHW.sh` is the VM setup automation for Kubernetes the Hard Way. Do not rename it or reinterpret it as kubeadm automation. `kubernetes-the-hard-way/` is the nested upstream KTHW working tree; keep it separate from the kubeadm implementation.
-* **kubeadm deployment path:** `scripts/kubeadm-setup.sh` and `platform/kubeadm/`.
+* **kubeadm deployment path:** `terraform/` provisions the VMs and generates the inventory; the Ansible playbooks in `scripts/Ansible/` prepare and bootstrap the nodes; runbooks live in `platform/kubeadm/`.
 * **Cluster deployment material:** under the root `platform/` directory, including `platform/wazuh/`.
 * **Wazuh content:** rules, endpoint configuration, integrations, evidence, and runbooks under `wazuh/content/`.
 * **Moving files:** confirm intent before moving anything between the KTHW learning path and the kubeadm deployment path.
@@ -38,13 +38,18 @@
 * Pin third-party versions and record the upstream source.
 
 ## 6. Validation
-* Run `python3 scripts/validate_repo.py` and relevant runtime checks before committing.
+* Repository checks run through pre-commit (`.pre-commit-config.yaml`) at `git commit` and in CI. Do not run the linters by hand after each edit; rely on the hook, and run `pre-commit run --all-files` only when asked or before opening a pull request. Runtime checks against the lab still apply.
 * Claims about a live cluster require redacted evidence from that cluster.
 
 ## 7. GitHub Flow
 * Work on a short-lived branch created from an up-to-date default branch; do not commit directly to the default branch.
 * Keep each commit small, focused, and independently understandable. Do not mix unrelated refactors, formatting, documentation, and behavior changes.
-* Test each commit with the narrowest relevant checks, then run `python3 scripts/validate_repo.py` and all applicable tests before opening or updating a pull request.
+* Test each commit with the narrowest relevant checks, then make sure `pre-commit run --all-files` and all applicable tests pass before opening or updating a pull request.
 * Use a pull request for review and require configured CI checks, validation gates, and reviewer approval to pass before merging.
 * Do not bypass failing or missing gates. Fix the change or document and obtain approval for an explicit exception.
 * Prefer squash merging when the branch contains fixup commits; preserve separate commits only when each one is intentionally useful and passes its applicable checks.
+
+## 8. Git Write Permission
+* Never run git commands that change the index, history, or remote (`git add`, `git commit`, `git push`, `git stash`, `git reset`, `git checkout`/`git switch`, `git merge`, `git rebase`, or opening a pull request) unless the learner explicitly asks for that specific action.
+* Read-only git commands (`git status`, `git diff`, `git log`, `git check-ignore`) are allowed.
+* When work is ready to commit, propose the commit split and messages, then wait for the learner to say to proceed. Approval for one commit or push does not carry over to the next.

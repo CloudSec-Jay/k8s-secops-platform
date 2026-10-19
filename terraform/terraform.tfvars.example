@@ -1,0 +1,5 @@
+# Copy this file to terraform.tfvars and replace the example values.
+# terraform.tfvars is ignored because environment-specific values may later
+# include sensitive data. This example remains safe to commit.
+libvirt_user = "your-remote-account"
+vm_user      = "your-vm-account"
