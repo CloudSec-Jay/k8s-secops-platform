@@ -39,4 +39,3 @@ sudo virsh net-list --all
 # --no-pager prints directly to the terminal instead of opening a pager.
 printf '\n=== Checking libvirt service ===\n'
 sudo systemctl status libvirtd --no-pager
-

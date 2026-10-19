@@ -9,9 +9,8 @@
   become: true
   gather_facts: true
 
+  # kubernetes_minor comes from group_vars/k8s_cluster.yml.
   vars:
-    # Keep this aligned with the reviewed pin in ../../versions.env.
-    kubernetes_minor: v1.37
     kubernetes_packages:
       - kubelet
       - kubeadm
@@ -113,14 +112,34 @@
         group: root
         mode: "0644"
 
-    - name: Configure the pinned Kubernetes package repository
-      ansible.builtin.apt_repository:
-        repo: >-
-          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc]
-          https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor }}/deb/ /
-        filename: kubernetes
+    # deb822_repository needs python3-debian on the node.
+    - name: Install the deb822 repository dependency
+      ansible.builtin.apt:
+        name: python3-debian
         state: present
+
+    # Replaced by kubernetes.sources below; keeping both makes apt see the
+    # repository twice.
+    - name: Remove the legacy one-line Kubernetes source
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/kubernetes.list
+        state: absent
+      register: kubernetes_legacy_source
+
+    - name: Configure the pinned Kubernetes package repository
+      ansible.builtin.deb822_repository:
+        name: kubernetes
+        types: deb
+        uris: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor }}/deb/"
+        suites: /
+        signed_by: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+        state: present
+      register: kubernetes_source
+
+    - name: Refresh the APT cache after a repository change
+      ansible.builtin.apt:
         update_cache: true
+      when: kubernetes_source is changed or kubernetes_legacy_source is changed
 
     # CHALLENGE 3 COMPLETE: Install and hold the Kubernetes packages.
     #

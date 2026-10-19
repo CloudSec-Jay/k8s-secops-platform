@@ -13,4 +13,4 @@ The file identifies itself as based on a Center for Internet Security benchmark.
 
 ## Referenced upstream deployment
 
-The staging script retrieves a pinned release of [wazuh/wazuh-kubernetes](https://github.com/wazuh/wazuh-kubernetes) into an ignored local directory. Those retrieved files are not committed here and remain governed by the upstream repository's license and notices.
+The Wazuh runbook clones a pinned release of [wazuh/wazuh-kubernetes](https://github.com/wazuh/wazuh-kubernetes) into an ignored local directory. Those retrieved files are not committed here and remain governed by the upstream repository's license and notices.

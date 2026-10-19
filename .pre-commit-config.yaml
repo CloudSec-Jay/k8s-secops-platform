@@ -1,0 +1,37 @@
+---
+# Checks run on staged files at `git commit`, and on every file in CI.
+#   Install once:   pre-commit install
+#   Run manually:   pre-commit run --all-files
+# Hook revisions are pinned to commit SHAs; the comment records the tag.
+exclude: ^(kubernetes-the-hard-way|\.cache)/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-xml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        # Two trailing spaces are a deliberate line break in Markdown.
+        args: [--markdown-linebreak-ext=md]
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: cba56bcde1fdd01c1deb3f945e69764c291a6530  # frozen: v1.38.0
+    hooks:
+      - id: yamllint
+        # cloud-init templates need a "#cloud-config" first line, which the
+        # comments rule rejects.
+        exclude: ^terraform/
+
+  - repo: https://github.com/ansible/ansible-lint
+    rev: e7f397ad6dfa20d274afa17cd7bbedd84ed136f5  # frozen: v26.9.0
+    hooks:
+      - id: ansible-lint
+        files: ^scripts/Ansible/
+        args: [scripts/Ansible/]
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: 80c8033123f6d6b9ccd1a9458562ea4180742af7  # frozen: v1.109.2
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate

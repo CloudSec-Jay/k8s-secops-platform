@@ -1,0 +1,27 @@
+---
+# Rendered by kubeadm-bootstrap.yaml for `kubeadm init --config`.
+# Values come from group_vars/k8s_cluster.yml and the inventory.
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "{{ ansible_host }}"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///var/run/containerd/containerd.sock
+# Cilium replaces kube-proxy, so kubeadm must not install it.
+skipPhases:
+  - addon/kube-proxy
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+# Must match the installed kubeadm and kubelet packages.
+kubernetesVersion: "{{ kubernetes_version }}"
+controlPlaneEndpoint: "{{ control_plane_endpoint }}"
+networking:
+  podSubnet: "{{ pod_subnet }}"
+  serviceSubnet: "{{ service_subnet }}"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+# Must match SystemdCgroup = true in /etc/containerd/config.toml.
+cgroupDriver: systemd
