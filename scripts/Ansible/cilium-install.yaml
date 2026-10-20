@@ -1,0 +1,62 @@
+---
+# Deploy Cilium CNI with eBPF kube-proxy replacement and Hubble observability.
+#
+# Prerequisites:
+#   1. kubeadm init completed with `--skip-phases addon/kube-proxy`
+#   2. helm-install.yaml executed so /usr/local/bin/helm is present
+#   3. /etc/kubernetes/admin.conf exists
+
+- name: Install Cilium CNI on the control plane
+  hosts: control_plane
+  become: true
+  gather_facts: true
+
+  vars:
+    cilium_values_path: /etc/kubernetes/cilium-values.yaml
+    control_plane_ip: "{{ control_plane_endpoint.split(':')[0] }}"
+    control_plane_port: "{{ control_plane_endpoint.split(':')[1] | int }}"
+
+  tasks:
+    - name: Verify cluster admin configuration exists
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_conf_stat
+      failed_when: not admin_conf_stat.stat.exists
+
+    - name: Verify Helm is installed
+      ansible.builtin.command:
+        cmd: helm version --short
+      register: helm_check
+      changed_when: false
+      failed_when: helm_check.rc != 0
+
+    - name: Stage the reviewed Cilium values file
+      ansible.builtin.copy:
+        src: ../../platform/cilium/values.yaml
+        dest: "{{ cilium_values_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Deploy or upgrade Cilium via Helm
+      kubernetes.core.helm:
+        name: cilium
+        chart_ref: oci://quay.io/cilium/charts/cilium
+        chart_version: "{{ cilium_version }}"
+        release_namespace: kube-system
+        create_namespace: false
+        kubeconfig: /etc/kubernetes/admin.conf
+        values_files:
+          - "{{ cilium_values_path }}"
+        values:
+          k8sServiceHost: "{{ control_plane_ip }}"
+          k8sServicePort: "{{ control_plane_port }}"
+        wait: true
+        timeout: "5m"
+
+    - name: Wait for the control-plane node to become Ready
+      ansible.builtin.command:
+        cmd: kubectl wait --for=condition=Ready "node/{{ inventory_hostname }}" --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false

@@ -1,0 +1,13 @@
+# Baseline for the wazuh namespace: an empty rule selects every pod and
+# allows nothing. Apply last, after the wazuh-* allow policies.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: wazuh
+spec:
+  endpointSelector: {}
+  ingress:
+    - {}
+  egress:
+    - {}

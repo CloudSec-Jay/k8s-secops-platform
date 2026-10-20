@@ -27,7 +27,7 @@ resource "libvirt_volume" "os_disk" {
   name = "${each.key}.qcow2"
   pool = var.storage_pool
 
-  capacity      = 30
+  capacity      = 60
   capacity_unit = "GiB"
   allocation    = 0
 

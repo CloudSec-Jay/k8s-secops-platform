@@ -1,0 +1,116 @@
+# Agent ports are open to the home LAN only: 1515 enrollment on the master,
+# 1514 events on the worker. The API (55000) stays dashboard-only.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wazuh-manager-master
+  namespace: wazuh
+spec:
+  endpointSelector:
+    matchLabels:
+      app: wazuh-manager
+      node-type: master
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: wazuh-dashboard
+      toPorts:
+        - ports:
+            - port: "55000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: wazuh-manager
+            node-type: worker
+      toPorts:
+        - ports:
+            - port: "1516"
+              protocol: TCP
+    - fromCIDR:
+        - 10.0.0.0/24
+      toPorts:
+        - ports:
+            - port: "1515"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-indexer
+      toPorts:
+        - ports:
+            - port: "9200"
+              protocol: TCP
+    # Vulnerability detection feed: the lookup, then the connection.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: cti.wazuh.com
+    - toFQDNs:
+        - matchName: cti.wazuh.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wazuh-manager-worker
+  namespace: wazuh
+spec:
+  endpointSelector:
+    matchLabels:
+      app: wazuh-manager
+      node-type: worker
+  ingress:
+    - fromCIDR:
+        - 10.0.0.0/24
+      toPorts:
+        - ports:
+            - port: "1514"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-indexer
+      toPorts:
+        - ports:
+            - port: "9200"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-manager
+            node-type: master
+      toPorts:
+        - ports:
+            - port: "1516"
+              protocol: TCP
+    # Vulnerability detection feed: the lookup, then the connection.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: cti.wazuh.com
+    - toFQDNs:
+        - matchName: cti.wazuh.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

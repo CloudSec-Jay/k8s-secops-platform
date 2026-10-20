@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A self-hosted Kubernetes SecOps case study using kubeadm, Cilium, Hubble, and Wazuh.">
+  <meta name="description" content="A self-hosted Kubernetes SecOps case study using Terraform, Ansible, kubeadm, Cilium, Hubble, and Wazuh on KVM/libvirt.">
   <meta name="theme-color" content="#f5efe1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
   <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&amp;family=JetBrains+Mono:wght@400;500&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261011-background">
+<link rel="stylesheet" href="style.css?v=20261020-lan-edge">
 </head>
 <body>
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="site-header">
     <a class="brand" href="https://cloudsec-jay.github.io/cloud-ops-engineering/"><span class="dot" aria-hidden="true"></span>Jason Tribble.</a>
-    <nav aria-label="Portfolio navigation"><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/">CloudOps</a><a href="https://cloudsec-jay.github.io/dragonwilds-aws/">Dragonwilds</a><a href="https://cloudsec-jay.github.io/k8s-secops-platform/" aria-current="page">SecOps</a><a href="https://cloudsec-jay.github.io/ai-ml-security/">AI Security</a><a href="https://cloudsec-jay.github.io/compliance-guardrails-integrity/">Compliance</a><a href="https://cloudsec-jay.github.io/cloud-resilience-recovery/">Resilience</a><a href="https://cloudsec-jay.github.io/red-team-lab-engineering/">Red Team</a></nav>
+    <nav aria-label="Portfolio navigation"><a href="https://cloudsec-jay.github.io/cloud-ops-engineering/">CloudOps</a><a href="https://cloudsec-jay.github.io/dragonwilds-aws/">AWS Workload</a><a href="https://cloudsec-jay.github.io/k8s-secops-platform/" aria-current="page">SecOps</a><a href="https://cloudsec-jay.github.io/ai-ml-security/">AI Security</a><a href="https://cloudsec-jay.github.io/compliance-guardrails-integrity/">Compliance</a><a href="https://cloudsec-jay.github.io/cloud-resilience-recovery/">Resilience</a><a href="https://cloudsec-jay.github.io/red-team-lab-engineering/">Red Team</a></nav>
     <div class="header-actions"><a class="header-button" href="https://cloudsec-jay.github.io/cloud-ops-engineering/#experience">Background</a><a class="header-link" href="https://github.com/CloudSec-Jay/k8s-secops-platform">Source ↗</a></div>
   </header>
 
@@ -31,11 +31,12 @@
           <p class="lede">A self-hosted security lab that treats network policy, flow visibility, detection content, and recovery as one operating system.</p>
         </div>
         <dl class="project-facts">
-          <div><dt>Platform</dt><dd>Linux VMs · kubeadm</dd></div>
-          <div><dt>Network</dt><dd>Cilium · Hubble</dd></div>
-          <div><dt>Detection</dt><dd>Wazuh</dd></div>
-          <div><dt>Storage</dt><dd>CSI-backed persistence</dd></div>
-          <div><dt>Status</dt><dd><span class="status-dot"></span>Evidence pending</dd></div>
+          <div><dt>Provision</dt><dd>Terraform · KVM/libvirt</dd></div>
+          <div><dt>Bootstrap</dt><dd>Ansible · kubeadm v1.37</dd></div>
+          <div><dt>Network</dt><dd>Cilium 1.20 · Hubble</dd></div>
+          <div><dt>Detection</dt><dd>Wazuh v4.14.8</dd></div>
+          <div><dt>Storage</dt><dd>local-path v0.0.37</dd></div>
+          <div><dt>Status</dt><dd><span class="status-dot"></span>Deployed · evidence in review</dd></div>
         </dl>
       </header>
 
@@ -43,48 +44,179 @@
         <h2 id="summary-title">The brief</h2>
         <div class="prose">
           <p>The goal is not simply to make Wazuh pods healthy. The system needs an explainable path from a Linux endpoint, through a controlled network boundary, into searchable evidence and an operator response.</p>
-          <p>This repository joins the kubeadm platform, Cilium policy, Hubble visibility, portable Wazuh content, and recovery guidance without hiding the work that still needs target-cluster validation.</p>
+          <p>Three VMs are provisioned by Terraform, prepared and bootstrapped by one Ansible entry point, networked by Cilium in eBPF mode, and run the upstream Wazuh stack on dynamic local storage. Every version is pinned, and the incidents met along the way are written up below.</p>
         </div>
       </section>
 
       <section class="project-section architecture-section" aria-labelledby="architecture-title">
-        <div class="section-heading"><p>01</p><h2 id="architecture-title">The signal path</h2></div>
-        <div class="signal-map" role="img" aria-label="Linux endpoints send events into a Cilium-networked kubeadm cluster containing the Wazuh manager, indexer, and dashboard.">
-          <div class="outside-zone">
-            <p class="map-label">MONITORED BOUNDARY</p>
-            <div class="map-node"><span>Origin</span><strong>Linux endpoints</strong><small>FIM · SCA · system logs</small></div>
+        <div class="section-heading"><p>01</p><h2 id="architecture-title">The infrastructure map</h2></div>
+        <figure class="infra-map">
+          <div class="map-scroll" tabindex="0" role="region" aria-label="Infrastructure map (scrolls sideways on small screens)">
+            <svg viewBox="0 0 1120 440" role="img" aria-labelledby="map-title map-desc">
+              <title id="map-title">Lab infrastructure and signal flow</title>
+              <desc id="map-desc">Linux endpoints and the operator browser sit on the home Wi-Fi LAN, 10.0.0.0/24. The KVM host at 10.0.0.39 is the LAN edge: it answers ARP for the Cilium LoadBalancer addresses 10.0.0.240 to 10.0.0.250 with proxy ARP, routes them to the virbr-k8s lab bridge, and forwards only TCP 443, 1514, and 1515 from the LAN. On the bridge, Cilium L2 announcements answer ARP for each address from worker-2, which runs the Wazuh dashboard on 10.0.0.240, the manager master for enrollment on 10.0.0.241, and the manager worker for events on 10.0.0.242. The managers forward alerts to the indexer on worker-1, which has no LAN address. worker-1 also runs the Cilium operator and Hubble relay, which receives flow data from the eBPF dataplane. The control plane at 192.168.100.10 runs the API server and etcd. Every pod starts in default deny.</desc>
+              <defs>
+                <path id="p-ingest" d="M200,201 H384 V346 H1088 V232 H1080"/>
+                <path id="p-index" d="M880,168 H855 V340 H838 V168 H830"/>
+                <path id="p-query" d="M880,293 H862 V352 H846 V176 H830"/>
+                <path id="p-view" d="M200,385 H384 V358 H1084 V293 H1080"/>
+                <path id="p-ctl-1" d="M575,140 V71 H730 V78"/>
+                <path id="p-ctl-2" d="M575,140 V71 H980 V78"/>
+                <clipPath id="band-clip"><rect x="390" y="326" width="708" height="40"/></clipPath>
+              </defs>
+
+              <!-- Home LAN, outside the host -->
+              <text class="t-label" x="20" y="100">HOME LAN · 10.0.0.0/24 · WI-FI</text>
+              <rect class="z-out" x="20" y="110" width="180" height="190"/>
+              <text class="t-label" x="34" y="132">MONITORED BOUNDARY</text>
+              <text class="t-node" x="34" y="160">Linux endpoints</text>
+              <text class="t-meta" x="34" y="178">Wazuh agent</text>
+              <text class="t-meta" x="34" y="192">FIM · SCA · syslog</text>
+              <g class="terminals">
+                <rect class="z-term" x="36" y="222" width="42" height="30"/><rect class="cursor" x="42" y="240" width="6" height="2"/>
+                <rect class="z-term" x="89" y="222" width="42" height="30"/><rect class="cursor c2" x="95" y="240" width="6" height="2"/>
+                <rect class="z-term" x="142" y="222" width="42" height="30"/><rect class="cursor c3" x="148" y="240" width="6" height="2"/>
+              </g>
+              <text class="t-port" x="204" y="194">1514/1515</text>
+
+              <rect class="z-out" x="20" y="340" width="180" height="80"/>
+              <text class="t-label" x="34" y="362">OPERATOR</text>
+              <text class="t-node" x="34" y="386">Triage console</text>
+              <text class="t-meta" x="34" y="404">browser · 10.0.0.240:443</text>
+
+              <!-- Hypervisor and network -->
+              <rect class="z-host" x="250" y="14" width="860" height="416"/>
+              <text class="t-label" x="262" y="32">KVM / LIBVIRT HOST · PROVISIONED BY TERRAFORM</text>
+              <rect class="z-net" x="262" y="42" width="836" height="22"/>
+              <text class="t-meta" x="272" y="57">virbr-k8s · 192.168.100.0/24 · libvirt NAT · Cilium answers ARP for VIPs 10.0.0.240–.242 from worker-2</text>
+
+              <!-- LAN edge on the host: Wi-Fi cannot bridge the VMs, so the host joins the segments at layer 3 -->
+              <rect class="z-node" x="262" y="78" width="116" height="336"/>
+              <text class="t-node" x="274" y="100">LAN edge</text>
+              <text class="t-meta" x="274" y="116">wlp0s20f3 · Wi-Fi</text>
+              <text class="t-meta" x="274" y="129">10.0.0.39</text>
+              <rect class="z-box hot" x="274" y="140" width="92" height="52"/><text class="t-box" x="284" y="162">proxy ARP</text><text class="t-meta" x="284" y="179">.240 – .250</text>
+              <rect class="z-box hot" x="274" y="206" width="92" height="52"/><text class="t-box" x="284" y="228">FORWARD</text><text class="t-meta" x="284" y="245">443·1514·1515</text>
+              <rect class="z-box" x="274" y="272" width="92" height="40"/><text class="t-box" x="284" y="296">libvirt hook</text>
+              <text class="t-meta" x="274" y="388">/32 route per VIP</text>
+              <text class="t-meta" x="274" y="401">LAN sources only</text>
+
+              <!-- Nodes -->
+              <rect class="z-node" x="395" y="78" width="200" height="336"/>
+              <text class="t-node" x="408" y="100">control-plane-1</text>
+              <text class="t-meta" x="408" y="116">192.168.100.10</text>
+              <text class="t-meta" x="408" y="129">2 vCPU · 4 GiB · 60 GiB</text>
+              <rect class="z-box" x="408" y="140" width="174" height="40"/><text class="t-box" x="420" y="164">kube-apiserver :6443</text>
+              <rect class="z-box" x="408" y="190" width="174" height="40"/><text class="t-box" x="420" y="214">etcd</text>
+              <rect class="z-box" x="408" y="240" width="174" height="40"/><text class="t-box" x="420" y="264">scheduler · controllers</text>
+              <text class="t-meta" x="408" y="304">helm v4.3.1 · kubeconfig stays local</text>
+
+              <rect class="z-node" x="615" y="78" width="230" height="336"/>
+              <text class="t-node" x="630" y="100">worker-1</text>
+              <text class="t-meta" x="630" y="116">192.168.100.21</text>
+              <text class="t-meta" x="630" y="129">4 vCPU · 8 GiB · 60 GiB</text>
+              <rect class="z-box hot" x="630" y="140" width="200" height="56"/><text class="t-box" x="642" y="164">wazuh-indexer-0</text><text class="t-meta" x="642" y="182">retain · :9200 · no LAN IP</text>
+              <rect class="z-box" x="630" y="212" width="200" height="56"/><text class="t-box" x="642" y="236">cilium-operator · hubble</text><text class="t-meta" x="642" y="254">relay :4245 · ui · coredns</text>
+              <rect class="z-pv" x="630" y="378" width="200" height="24"/><text class="t-meta" x="642" y="394">local-path PV · node-pinned</text>
+
+              <rect class="z-node" x="865" y="78" width="230" height="336"/>
+              <text class="t-node" x="880" y="100">worker-2</text>
+              <text class="t-meta" x="880" y="116">192.168.100.22 · L2 lease holder</text>
+              <text class="t-meta" x="880" y="129">4 vCPU · 8 GiB · 60 GiB</text>
+              <rect class="z-box hot" x="880" y="140" width="200" height="56"/><text class="t-box" x="892" y="164">wazuh-manager-master-0</text><text class="t-meta" x="892" y="182">enroll :1515 · VIP .241</text>
+              <rect class="z-box hot" x="880" y="204" width="200" height="56"/><text class="t-box" x="892" y="228">wazuh-manager-worker-0</text><text class="t-meta" x="892" y="246">events :1514 · VIP .242</text>
+              <rect class="z-box" x="880" y="268" width="200" height="50"/><text class="t-box" x="892" y="290">wazuh-dashboard</text><text class="t-meta" x="892" y="307">UI :5601 · VIP .240</text>
+              <rect class="z-pv" x="880" y="378" width="200" height="24"/><text class="t-meta" x="892" y="394">local-path PV · node-pinned</text>
+
+              <!-- Cilium dataplane spanning every node -->
+              <rect class="z-band" x="390" y="326" width="708" height="40"/>
+              <rect class="band-sheen" x="390" y="326" width="80" height="40" clip-path="url(#band-clip)"/>
+              <text class="t-band" x="403" y="350">CILIUM eBPF · KUBE-PROXY REPLACEMENT · L2 ANNOUNCEMENTS · DEFAULT DENY · HUBBLE</text>
+              <path class="flow-hubble" d="M730,326 V268"/>
+
+              <!-- Flow traces -->
+              <use class="trace trace-event" href="#p-ingest"/>
+              <use class="trace trace-index" href="#p-index"/>
+              <use class="trace trace-index" href="#p-query"/>
+              <use class="trace trace-view" href="#p-view"/>
+              <use class="trace trace-ctl" href="#p-ctl-1"/>
+              <use class="trace trace-ctl" href="#p-ctl-2"/>
+
+              <!-- Moving packets (SMIL; no JavaScript, so the page CSP stays script-src 'none') -->
+              <g class="packets">
+                <circle class="pkt pkt-event" r="4"><animateMotion dur="5s" repeatCount="indefinite" begin="0s"><mpath href="#p-ingest"/></animateMotion></circle>
+                <circle class="pkt pkt-event" r="4"><animateMotion dur="5s" repeatCount="indefinite" begin="-1.7s"><mpath href="#p-ingest"/></animateMotion></circle>
+                <circle class="pkt pkt-event" r="4"><animateMotion dur="5s" repeatCount="indefinite" begin="-3.4s"><mpath href="#p-ingest"/></animateMotion></circle>
+                <circle class="pkt pkt-index" r="4"><animateMotion dur="3.6s" repeatCount="indefinite" begin="-0.6s"><mpath href="#p-index"/></animateMotion></circle>
+                <circle class="pkt pkt-index" r="4"><animateMotion dur="3.6s" repeatCount="indefinite" begin="-2.4s"><mpath href="#p-index"/></animateMotion></circle>
+                <circle class="pkt pkt-index" r="3"><animateMotion dur="3.2s" repeatCount="indefinite" begin="-0.4s"><mpath href="#p-query"/></animateMotion></circle>
+                <circle class="pkt pkt-view" r="4"><animateMotion dur="4.4s" repeatCount="indefinite" begin="-1s"><mpath href="#p-view"/></animateMotion></circle>
+                <circle class="pkt pkt-view" r="4"><animateMotion dur="4.4s" repeatCount="indefinite" begin="-3.2s"><mpath href="#p-view"/></animateMotion></circle>
+                <circle class="pkt pkt-ctl" r="2.5"><animateMotion dur="2.6s" repeatCount="indefinite" begin="-0.3s"><mpath href="#p-ctl-1"/></animateMotion></circle>
+                <circle class="pkt pkt-ctl" r="2.5"><animateMotion dur="3.4s" repeatCount="indefinite" begin="-1.5s"><mpath href="#p-ctl-2"/></animateMotion></circle>
+              </g>
+            </svg>
           </div>
-          <div class="ingest-line"><span>1514 / 1515</span><i></i></div>
-          <div class="cluster-zone">
-            <div class="zone-head"><p class="map-label">KUBEADM TRUST ZONE</p><span>Cilium policy · Hubble flows</span></div>
-            <div class="cluster-flow">
-              <div class="map-node"><span>Ingest</span><strong>Manager</strong><small>Rules · decoders</small></div><b aria-hidden="true">→</b>
-              <div class="map-node"><span>Retain</span><strong>Indexer</strong><small>Security data</small></div><b aria-hidden="true">→</b>
-              <div class="map-node"><span>Operate</span><strong>Dashboard</strong><small>Triage · investigate</small></div>
-            </div>
-            <p class="storage-line">Persistent evidence / backup and restore boundary</p>
-          </div>
-        </div>
+          <figcaption>
+            <ul class="map-legend">
+              <li><i class="k-event"></i>Agent events</li>
+              <li><i class="k-index"></i>Alerts to the indexer</li>
+              <li><i class="k-view"></i>Operator queries</li>
+              <li><i class="k-ctl"></i>Control plane to kubelets</li>
+              <li><i class="k-hubble"></i>Hubble flow export</li>
+            </ul>
+            <p>A modeled view, not live telemetry. Node sizing and addresses come from <code>terraform/locals.tf</code>; pod placement, the L2 lease holder, and VIP assignments were observed on the live cluster on 2026-10-20. Local-path volumes pin each stateful pod to the node that holds its data.</p>
+          </figcaption>
+        </figure>
         <div class="prose architecture-copy">
-          <p>Cilium starts from isolation and preserves DNS deliberately. Hubble exposes the resulting flows so policy can be built from observed behavior instead of assumptions.</p>
+          <p>Cilium replaces kube-proxy entirely: kubeadm skips the <code>addon/kube-proxy</code> phase and service routing happens in eBPF. Hubble exposes the resulting flows so policy can be built from observed behavior instead of assumptions.</p>
+          <p>The host reaches the home LAN over Wi-Fi, which cannot bridge VMs. Instead, Cilium L2 announcements answer ARP for LoadBalancer addresses on the lab bridge, and the host answers for the same addresses on the LAN with proxy ARP, forwarding only ports 443, 1514, and 1515. Services opt in by label, so the indexer never receives a LAN address.</p>
+          <p>Every pod in every namespace starts in default deny. The allow rules were written from captured Hubble flows, DNS is limited to the names each workload needs, and the managers reach the vulnerability feed by FQDN rather than by IP range.</p>
           <p>Wazuh receives endpoint events, applies reviewed rules and decoders, retains searchable security data, and gives the operator a place to investigate.</p>
         </div>
       </section>
 
+      <section class="project-section" aria-labelledby="pipeline-title">
+        <div class="section-heading"><p>02</p><h2 id="pipeline-title">One path from empty host to running stack</h2></div>
+        <div class="pipeline-wrap">
+          <ol class="pipeline">
+            <li><span>Terraform</span><h3>Provision the lab</h3><p>NAT network with DHCP reservations, a pinned Ubuntu 24.04 base image, 60 GiB disks, cloud-init seeds, and a generated Ansible inventory.</p><code>terraform/</code></li>
+            <li><span>Ansible · 1</span><h3>Prepare nodes</h3><p>containerd with systemd cgroups, <code>overlay</code> and <code>br_netfilter</code>, sysctls, swap off, and held kubeadm packages.</p><code>cluster-setup.yaml</code></li>
+            <li><span>Ansible · 2</span><h3>Form the cluster</h3><p><code>kubeadm init</code> without kube-proxy; workers join with a fresh token, and <code>creates:</code> makes re-runs a no-op.</p><code>kubeadm-bootstrap.yaml</code></li>
+            <li><span>Ansible · 3</span><h3>Pinned Helm</h3><p>Helm v4.3.1, SHA-256 verified, installed on the control plane so the admin kubeconfig never leaves the node.</p><code>helm-install.yaml</code></li>
+            <li><span>Ansible · 4</span><h3>eBPF dataplane</h3><p>Cilium 1.20.2 from the OCI chart with reviewed values, then a wait for the node to report Ready.</p><code>cilium-install.yaml</code></li>
+            <li><span>Ansible · 5</span><h3>Dynamic storage</h3><p>local-path-provisioner v0.0.37 becomes the default StorageClass for stateful workloads.</p><code>storage-setup.yaml</code></li>
+            <li><span>Runbook</span><h3>Wazuh workload</h3><p>Upstream Wazuh v4.14.8 with a Kustomize overlay that maps <code>wazuh-storage</code> to the local-path provisioner.</p><code>platform/wazuh/</code></li>
+          </ol>
+          <p class="pipeline-note"><code>ansible-playbook site.yaml</code> runs the five Ansible stages in dependency order.</p>
+        </div>
+      </section>
+
       <section class="project-section" aria-labelledby="controls-title">
-        <div class="section-heading"><p>02</p><h2 id="controls-title">Controls with provenance</h2></div>
+        <div class="section-heading"><p>03</p><h2 id="controls-title">Controls with provenance</h2></div>
         <div class="control-matrix">
           <a href="https://github.com/CloudSec-Jay/k8s-secops-platform/tree/main/platform/cilium"><span>A / NETWORK</span><h3>Default-deny foundation</h3><p>Workload communication begins isolated. DNS and application flows are opened deliberately from observed requirements.</p><strong>Policy source ↗</strong></a>
           <a href="https://github.com/CloudSec-Jay/k8s-secops-platform/tree/main/wazuh/content"><span>B / DETECTION</span><h3>Portable Wazuh content</h3><p>FIM rules, SCA material, endpoint configuration, tuning notes, and response runbooks live with the platform.</p><strong>Review first ↗</strong></a>
-          <a href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/platform/wazuh/README.md"><span>C / SUPPLY CHAIN</span><h3>Pinned upstream boundary</h3><p>Wazuh Kubernetes is staged from a reviewed tag while generated credentials and vendor trees stay outside Git.</p><strong>Version pinned ↗</strong></a>
+          <a href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/versions.env"><span>C / SUPPLY CHAIN</span><h3>Pinned upstream boundary</h3><p>Kubernetes, Helm, Cilium, Wazuh, and the storage provisioner are pinned in one file. The Helm binary is checksum-verified, and generated credentials and vendor trees stay outside Git.</p><strong>Version pinned ↗</strong></a>
           <a href="https://github.com/CloudSec-Jay/cloud-ops-engineering/tree/main/security/policy-as-code"><span>D / GOVERNANCE</span><h3>One policy source</h3><p>OPA remains canonical in Cloud Operations, preventing a copied ruleset here from drifting silently.</p><strong>Shared control ↗</strong></a>
         </div>
       </section>
 
+      <section class="project-section" aria-labelledby="incidents-title">
+        <div class="section-heading"><p>04</p><h2 id="incidents-title">What broke, and why</h2></div>
+        <div class="incident-log">
+          <div><span>INC-01 / STORAGE</span><h3>PVCs stuck Pending</h3><p>The upstream overlay pointed <code>wazuh-storage</code> at a MicroK8s provisioner that does not exist here.</p><strong>Fix: a Kustomize patch to <code>rancher.io/local-path</code> with <code>WaitForFirstConsumer</code>.</strong></div>
+          <div><span>INC-02 / NETWORK</span><h3>Image pulls timing out</h3><p>DNS returned IPv6 addresses for the registry CDN, but the libvirt bridge is IPv4-only, so pulls stalled before falling back.</p><strong>Fix: traced through kubelet events; the pull completed over IPv4 with cached layers kept.</strong></div>
+          <div><span>INC-03 / CAPACITY</span><h3>Eviction loop on worker-2</h3><p>Vulnerability feeds, images, and the OS filled a 30 GiB disk. Kubelet tainted the node, and node-pinned volumes left the pod nowhere to go.</p><strong>Fix: online resize to 60 GiB with <code>virsh blockresize</code> and <code>growpart</code>, then Terraform reconciled.</strong></div>
+          <div><span>INC-04 / STARTUP</span><h3>Dashboard login timeout</h3><p>The dashboard's 20-second API call reached the manager while its REST API was still cold-starting after the resize.</p><strong>Fix: confirmed from dashboard logs; requests returned 200 in about 200 ms once the API was up.</strong></div>
+        </div>
+        <p class="incident-link"><a href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/PROBLEM_SOLVED.md">Read the full case study ↗</a></p>
+      </section>
+
       <section class="project-section" aria-labelledby="evidence-title">
-        <div class="section-heading"><p>03</p><h2 id="evidence-title">Evidence before confidence</h2></div>
+        <div class="section-heading"><p>05</p><h2 id="evidence-title">Evidence before confidence</h2></div>
         <div class="evidence-path">
-          <div><span>01</span><h3>Establish health</h3><p>Confirm kubeadm, Cilium, and the required platform components.</p><em>Pending</em></div>
+          <div><span>01</span><h3>Establish health</h3><p>Confirm kubeadm, Cilium, and the required platform components.</p><em class="observed">Observed · redaction in review</em></div>
           <div><span>02</span><h3>Enroll an endpoint</h3><p>Verify authenticated ingestion into the Wazuh manager.</p><em>Pending</em></div>
           <div><span>03</span><h3>Generate evidence</h3><p>Turn a harmless test event into a searchable, explainable alert.</p><em>Pending</em></div>
           <div><span>04</span><h3>Exercise recovery</h3><p>Restart components and restore state from documented backups.</p><em>Pending</em></div>
@@ -92,10 +224,10 @@
       </section>
 
       <section class="project-section current-state" aria-labelledby="state-title">
-        <div class="section-heading"><p>04</p><h2 id="state-title">Current state</h2></div>
+        <div class="section-heading"><p>06</p><h2 id="state-title">Current state</h2></div>
         <div class="state-layout">
-          <p class="state-callout">Implementation-ready.<br><em>Evidence still required.</em></p>
-          <div class="prose"><p>The repository includes the deployment path, Cilium configuration, migrated Wazuh content, operational guidance, and validation workflow.</p><p>The next meaningful step is target-cluster execution: enroll an endpoint, verify the complete signal path, test a safe detection, then exercise persistence and recovery. Until then, the page describes source and design—not production proof.</p></div>
+          <p class="state-callout">Running in the lab.<br><em>Evidence still required.</em></p>
+          <div class="prose"><p>The cluster is provisioned and bootstrapped from code, Cilium and local-path storage are in place, and the Wazuh stack reached a working dashboard after the incidents above were resolved.</p><p>The next step is proof rather than progress: enroll an endpoint, verify the complete signal path, test a safe detection, then exercise persistence and recovery, committing redacted evidence at each stage.</p></div>
         </div>
       </section>
 

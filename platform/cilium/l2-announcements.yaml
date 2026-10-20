@@ -1,0 +1,18 @@
+# Worker nodes answer ARP for LoadBalancer IPs of opted-in Services only.
+# Must select the same label as lb-ip-pool.yaml.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: lan-services
+spec:
+  serviceSelector:
+    matchLabels:
+      lab.internal/expose: lan
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+  interfaces:
+    - ^enp0s2$
+  externalIPs: false
+  loadBalancerIPs: true

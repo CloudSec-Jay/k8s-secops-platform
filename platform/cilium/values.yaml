@@ -21,6 +21,9 @@ hubble:
 ipam:
   mode: kubernetes
 
+l2announcements:
+  enabled: true
+
 rollOutCiliumPods: true
 
 securityContext:

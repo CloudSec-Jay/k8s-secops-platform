@@ -1,0 +1,5 @@
+#!/bin/sh
+# Rendered by kvm-host-lan.yaml. Proxy ARP entries are dropped when
+# {{ lan_interface }} goes down, so re-publish the lab VIPs when it comes back.
+[ "$1" = "{{ lan_interface }}" ] && [ "$2" = "up" ] || exit 0
+exec /etc/libvirt/hooks/network {{ libvirt_network }} started begin - </dev/null
