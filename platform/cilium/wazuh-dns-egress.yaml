@@ -23,3 +23,10 @@ spec:
             dns:
               - matchPattern: "*.wazuh.svc.cluster.local"
               - matchPattern: "*.wazuh-cluster.wazuh.svc.cluster.local"
+              # The worker reaches the master as wazuh-manager-master-0.wazuh-cluster.wazuh.
+              # "*" never crosses a dot, so that name and the expansions the pod's
+              # search path tries first need their own patterns. The lookup only
+              # happens on reconnect, so it was missed when rules came from observed flows.
+              - matchPattern: "*.wazuh-cluster.wazuh"
+              - matchPattern: "*.wazuh-cluster.wazuh.wazuh.svc.cluster.local"
+              - matchPattern: "*.wazuh-cluster.wazuh.cluster.local"
