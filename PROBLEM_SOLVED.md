@@ -86,8 +86,8 @@ wazuh-manager-master-0   0/1   Evicted   0   0s
 ```
 Scheduler events reported:
 ```text
-0/3 nodes are available: 
-  1 node(s) didn't match PersistentVolume's node affinity, 
+0/3 nodes are available:
+  1 node(s) didn't match PersistentVolume's node affinity,
   2 node(s) had untolerated taint(s).
 ```
 
@@ -167,4 +167,3 @@ Once `wazuh-apid` initialized, all subsequent API requests returned **`HTTP 200 
 2. **Storage Topology Awareness:** `local-path` is hostPath-based; volume affinity strictly binds pods to specific worker nodes. Storage constraints directly impact the Kubernetes scheduling pipeline.
 3. **Host-Level Kubelet Protections:** Kubelet acts as a node watchdog. Understanding eviction thresholds (`imageGCHighThresholdPercent`) and conditions (`DiskPressure`, `MemoryPressure`) is essential for root-causing scheduling freezes.
 4. **Day 2 Live Operations vs. IaC:** Destructive Terraform replacements must never be applied blindly to stateful production nodes. Live hypervisor block resizing (`virsh blockresize` + `growpart`) followed by IaC state reconciliation is the industry-standard workflow.
-

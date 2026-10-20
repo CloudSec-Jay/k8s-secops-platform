@@ -25,6 +25,11 @@
         cmd: kubectl apply -f /etc/kubernetes/local-path-storage.yaml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
+      register: local_path_apply
+      # kubectl reports "unchanged" for every object that already matches.
+      changed_when: >-
+        ' created' in local_path_apply.stdout or
+        ' configured' in local_path_apply.stdout
 
     - name: Set local-path as the default StorageClass
       ansible.builtin.command:
@@ -33,6 +38,8 @@
           -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
+      register: local_path_default
+      changed_when: "'(no change)' not in local_path_default.stdout"
 
     - name: Wait for the local-path-provisioner deployment to be Available
       ansible.builtin.command:
@@ -42,4 +49,3 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       changed_when: false
-

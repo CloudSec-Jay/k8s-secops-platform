@@ -89,6 +89,8 @@
       ansible.builtin.command:
         cmd: /etc/libvirt/hooks/network {{ libvirt_network }} started begin -
         stdin: ""
+      # Runs only when the hook template changed, so it always applies new state.
+      changed_when: true
 
   post_tasks:
     - name: Show the published routes, proxy ARP entries, and forward rules

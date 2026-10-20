@@ -11,9 +11,13 @@
 # Usage:
 #   ansible-playbook site.yaml
 
-- import_playbook: cluster-setup.yaml
-- import_playbook: kubeadm-bootstrap.yaml
-- import_playbook: helm-install.yaml
-- import_playbook: cilium-install.yaml
-- import_playbook: storage-setup.yaml
-
+- name: Prepare nodes
+  ansible.builtin.import_playbook: cluster-setup.yaml
+- name: Initialize the control plane and join workers
+  ansible.builtin.import_playbook: kubeadm-bootstrap.yaml
+- name: Install the pinned Helm client
+  ansible.builtin.import_playbook: helm-install.yaml
+- name: Deploy Cilium
+  ansible.builtin.import_playbook: cilium-install.yaml
+- name: Configure dynamic persistent storage
+  ansible.builtin.import_playbook: storage-setup.yaml
