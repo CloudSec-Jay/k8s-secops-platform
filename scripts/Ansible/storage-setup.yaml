@@ -1,0 +1,51 @@
+---
+# Deploy Rancher local-path-provisioner and configure default StorageClass.
+#
+# Prerequisites:
+#   1. Kubernetes cluster bootstrapped (kubeadm-bootstrap.yaml)
+#   2. CNI installed (cilium-install.yaml)
+#   3. local_path_provisioner_version defined in group_vars/k8s_cluster.yml
+
+- name: Configure dynamic persistent storage
+  hosts: control_plane
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Download the pinned local-path-provisioner manifest
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/rancher/local-path-provisioner/{{ local_path_provisioner_version }}/deploy/local-path-storage.yaml"
+        dest: /etc/kubernetes/local-path-storage.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply the local-path-provisioner manifest
+      ansible.builtin.command:
+        cmd: kubectl apply -f /etc/kubernetes/local-path-storage.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: local_path_apply
+      # kubectl reports "unchanged" for every object that already matches.
+      changed_when: >-
+        ' created' in local_path_apply.stdout or
+        ' configured' in local_path_apply.stdout
+
+    - name: Set local-path as the default StorageClass
+      ansible.builtin.command:
+        cmd: >-
+          kubectl patch storageclass local-path
+          -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: local_path_default
+      changed_when: "'(no change)' not in local_path_default.stdout"
+
+    - name: Wait for the local-path-provisioner deployment to be Available
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=Available deployment/local-path-provisioner
+          -n local-path-storage --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false

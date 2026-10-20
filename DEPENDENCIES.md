@@ -32,6 +32,7 @@ versions.
 | Component | Reviewed version | Used by |
 |---|---:|---|
 | Kubernetes | `v1.37` minor | `kubeadm`, `kubelet`, and `kubectl` package repository |
+| Helm | `v3.22.1` | Install the pinned Cilium chart from the control plane |
 | Cilium | `1.20.2` | CNI, kube-proxy replacement, and Hubble |
 | Wazuh | `v4.14.8` | Upstream `wazuh/wazuh-kubernetes` release |
 | Ubuntu cloud image | `24.04`, release `20260926` | VM provisioning script |
@@ -91,6 +92,9 @@ The machine driving the deployment needs:
 The administrator kubeconfig, kubeadm join command, bootstrap tokens, TLS keys,
 and deployment credentials are runtime secrets. Keep them outside Git and
 redact them from evidence.
+
+The Ansible workflow installs the pinned Helm client on the control-plane VM so
+the administrator kubeconfig does not need to be copied back to the workstation.
 
 ## 3. Kubernetes node dependencies
 

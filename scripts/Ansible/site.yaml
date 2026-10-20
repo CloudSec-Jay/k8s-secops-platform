@@ -1,0 +1,23 @@
+---
+# Master Kubernetes Platform Orchestrator
+#
+# Executes the full cluster bootstrap sequence in strict dependency order:
+#   1. Prepare nodes (containerd, kernel modules, sysctls, kubelet/kubeadm)
+#   2. Initialize control plane and join worker nodes
+#   3. Install pinned Helm client binary
+#   4. Deploy Cilium CNI with eBPF kube-proxy replacement
+#   5. Configure dynamic persistent storage (local-path default StorageClass)
+#
+# Usage:
+#   ansible-playbook site.yaml
+
+- name: Prepare nodes
+  ansible.builtin.import_playbook: cluster-setup.yaml
+- name: Initialize the control plane and join workers
+  ansible.builtin.import_playbook: kubeadm-bootstrap.yaml
+- name: Install the pinned Helm client
+  ansible.builtin.import_playbook: helm-install.yaml
+- name: Deploy Cilium
+  ansible.builtin.import_playbook: cilium-install.yaml
+- name: Configure dynamic persistent storage
+  ansible.builtin.import_playbook: storage-setup.yaml

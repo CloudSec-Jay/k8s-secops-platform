@@ -26,3 +26,6 @@ crash.*.log
 scripts/Ansible/k8s.ini
 terraform/tfplan
 .vscode/
+
+# Open security findings about the live lab; kept local until fixed.
+docs/security-gaps.md

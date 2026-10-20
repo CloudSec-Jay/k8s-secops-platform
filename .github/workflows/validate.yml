@@ -25,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.13"
+          python-version: "3.14"  # ansible-lint v26 pins its pre-commit hook to python3.14
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
@@ -35,6 +35,12 @@ jobs:
 
       - name: Install pre-commit
         run: python -m pip install --disable-pip-version-check pre-commit==4.6.2
+
+      # ansible-lint resolves modules from ~/.ansible/collections.
+      - name: Install pinned Ansible collections
+        run: |
+          python -m pip install --disable-pip-version-check ansible-core==2.21.4
+          ansible-galaxy collection install -r scripts/Ansible/requirements.yml
 
       # Same hooks as the local git commit hook (.pre-commit-config.yaml).
       - name: Run pre-commit checks

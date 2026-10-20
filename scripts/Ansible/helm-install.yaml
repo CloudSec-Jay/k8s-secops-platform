@@ -1,0 +1,58 @@
+---
+- name: Install the pinned Helm client on the control plane
+  hosts: control_plane
+  become: true
+  gather_facts: true
+  vars:
+    helm_archive: "helm-{{ helm_version }}-linux-amd64.tar.gz"
+    helm_install_directory: "/opt/helm/{{ helm_version }}"
+
+  tasks:
+    - name: Require the reviewed Helm architecture
+      ansible.builtin.assert:
+        that:
+          - ansible_facts["architecture"] == "x86_64"
+        fail_msg: >-
+          This playbook currently pins only the official Helm linux-amd64
+          artifact and checksum.
+
+    - name: Create the versioned Helm installation directory
+      ansible.builtin.file:
+        path: "{{ helm_install_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download the pinned Helm archive
+      ansible.builtin.get_url:
+        url: "https://get.helm.sh/{{ helm_archive }}"
+        dest: "/var/tmp/{{ helm_archive }}"
+        checksum: "sha256:{{ helm_linux_amd64_sha256 }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Extract the pinned Helm archive
+      ansible.builtin.unarchive:
+        src: "/var/tmp/{{ helm_archive }}"
+        dest: "{{ helm_install_directory }}"
+        remote_src: true
+        creates: "{{ helm_install_directory }}/linux-amd64/helm"
+
+    - name: Install the pinned Helm executable
+      ansible.builtin.copy:
+        src: "{{ helm_install_directory }}/linux-amd64/helm"
+        dest: /usr/local/bin/helm
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Verify the installed Helm version
+      ansible.builtin.command:
+        cmd: helm version --short
+      register: helm_version_result
+      changed_when: false
+      failed_when: helm_version not in helm_version_result.stdout
+      when: not ansible_check_mode

@@ -1,0 +1,109 @@
+---
+# Publish the lab's Cilium LoadBalancer IPs on the home LAN from the KVM host.
+#
+# Cilium answers ARP for the VIPs on the lab bridge (L2 announcements). The
+# host bridges the gap to the Wi-Fi LAN, which cannot be bridged directly:
+# it routes the VIPs to virbr-k8s, proxy-ARPs for them on the LAN interface,
+# and allows forwarding of the exposed ports only. The rules live in a libvirt
+# network hook so they are reapplied whenever the network starts.
+#
+# Prerequisites:
+#   1. platform/cilium/lb-ip-pool.yaml and l2-announcements.yaml applied
+#   2. libvirt uses its iptables firewall backend (checked below)
+#
+# Usage (sudo on the host needs a password):
+#   ansible-playbook -i kvm-host.ini kvm-host-lan.yaml -K
+
+- name: Publish lab LoadBalancer IPs on the LAN
+  hosts: kvm_host
+  become: true
+  gather_facts: false
+
+  vars:
+    libvirt_network: k8s-lab
+    lab_bridge: virbr-k8s
+    lan_interface: wlp0s20f3
+    lan_cidr: 10.0.0.0/24
+    # Must match the block in platform/cilium/lb-ip-pool.yaml.
+    lb_vips: "{{ range(240, 251) | map('string') | map('regex_replace', '^', '10.0.0.') | list }}"
+    # Dashboard (443), agent events (1514), agent enrollment (1515).
+    lan_ports: [443, 1514, 1515]
+
+  tasks:
+    - name: Read the FORWARD chain
+      ansible.builtin.command:
+        cmd: iptables -S FORWARD
+      register: forward_chain
+      changed_when: false
+
+    - name: Require libvirt's iptables backend so the hook's rules can precede it
+      ansible.builtin.assert:
+        that: "'-j LIBVIRT_FWI' in forward_chain.stdout"
+        fail_msg: >-
+          libvirt rules are not in the iptables FORWARD chain. With the
+          nftables backend an ACCEPT in another table cannot override
+          libvirt's REJECT, so this approach does not apply.
+
+    - name: Create the libvirt hooks directory
+      ansible.builtin.file:
+        path: /etc/libvirt/hooks
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Check whether the network hook already exists
+      ansible.builtin.stat:
+        path: /etc/libvirt/hooks/network
+      register: network_hook_before
+
+    - name: Install the libvirt network hook
+      ansible.builtin.template:
+        src: templates/libvirt-network-hook.sh.j2
+        dest: /etc/libvirt/hooks/network
+        owner: root
+        group: root
+        mode: "0755"
+      notify:
+        - Restart libvirtd to register the hook
+        - Apply the hook to the running network
+
+    - name: Re-publish the VIPs when the LAN interface reconnects
+      ansible.builtin.template:
+        src: templates/nm-dispatcher-lab-lan.sh.j2
+        dest: /etc/NetworkManager/dispatcher.d/90-k8s-lab-lan
+        owner: root
+        group: root
+        mode: "0755"
+
+  handlers:
+    # libvirt only discovers a newly created hook script at daemon start.
+    # Running VMs are not affected by a daemon restart.
+    - name: Restart libvirtd to register the hook
+      ansible.builtin.systemd:
+        name: libvirtd
+        state: restarted
+      when: not network_hook_before.stat.exists
+
+    - name: Apply the hook to the running network
+      ansible.builtin.command:
+        cmd: /etc/libvirt/hooks/network {{ libvirt_network }} started begin -
+        stdin: ""
+      # Runs only when the hook template changed, so it always applies new state.
+      changed_when: true
+
+  post_tasks:
+    - name: Show the published routes, proxy ARP entries, and forward rules
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          ip -4 route show dev {{ lab_bridge }} | grep -F '10.0.0.'
+          ip neigh show proxy dev {{ lan_interface }}
+          iptables -S FORWARD | grep -F -e '{{ libvirt_network }}-lan' -e LIBVIRT_FW
+        executable: /bin/bash
+      register: published
+      changed_when: false
+
+    - name: Report the published state
+      ansible.builtin.debug:
+        var: published.stdout_lines

@@ -1,6 +1,8 @@
 # Kubernetes SecOps Platform
 
-A self-hosted security lab that consolidates the former Wazuh operations and Kubernetes platform work as Project 03. The target is a multi-VM Kubernetes cluster bootstrapped with `kubeadm`, networked and observed with Cilium, and running the upstream Wazuh Kubernetes deployment.
+> **Field Project 02 of the [Cloud Operations Engineering](https://github.com/CloudSec-Jay/cloud-ops-engineering) system.** Each project lives in its own repository and links back to the hub. [Portfolio site](https://cloudsec-jay.github.io/cloud-ops-engineering/) · [Project site](https://cloudsec-jay.github.io/k8s-secops-platform/)
+
+A self-hosted security lab that consolidates the former Wazuh operations and Kubernetes platform work as Field Project 02. The target is a multi-VM Kubernetes cluster bootstrapped with `kubeadm`, networked and observed with Cilium, and running the upstream Wazuh Kubernetes deployment.
 
 ## Architecture
 
@@ -31,6 +33,7 @@ Linux endpoints / Kubernetes nodes
 | [`platform/manifests/`](platform/manifests/) | Namespace and baseline Kubernetes manifests |
 | [`platform/wazuh/`](platform/wazuh/README.md) | Upstream Wazuh Kubernetes deployment runbook for the VM cluster |
 | [`wazuh/content/`](wazuh/content/README.md) | Migrated endpoint configs, rules, SCA content, integrations, and runbooks |
+| [`PROBLEM_SOLVED.md`](PROBLEM_SOLVED.md) | Engineering postmortem & troubleshooting case studies (storage, networking, disk pressure) |
 | [`docs/site/`](docs/site/index.html) | GitHub Pages project site |
 
 ## Deployment path
@@ -46,7 +49,7 @@ Linux endpoints / Kubernetes nodes
 
 - No Minikube workflow is included; this lab targets VMs managed with `kubeadm`.
 - No Docker Compose or Podman Quadlet Wazuh runtime is included.
-- Policy-as-code remains in [Cloud Operations Project 06](https://github.com/CloudSec-Jay/cloud-ops-engineering/tree/main/security/policy-as-code) and is linked rather than duplicated.
+- Policy-as-code remains in [Cloud Operations policy-as-code](https://github.com/CloudSec-Jay/cloud-ops-engineering/tree/main/security/policy-as-code) and is linked rather than duplicated.
 - Upstream Wazuh Kubernetes manifests are staged at deployment time instead of copied into this repository. This keeps the vendor boundary and version pin explicit.
 - Active-response files are prototypes. They are not enabled by the platform deployment.
 
@@ -64,6 +67,7 @@ The hooks are defined in `.pre-commit-config.yaml`, and CI runs the same hooks o
 
 ## Documentation
 
+- Operational case study & troubleshooting log: [`PROBLEM_SOLVED.md`](PROBLEM_SOLVED.md)
 - Deployment prerequisites and dependency order: [`DEPENDENCIES.md`](DEPENDENCIES.md)
 - Project site: <https://cloudsec-jay.github.io/k8s-secops-platform/>
 - Source: <https://github.com/CloudSec-Jay/k8s-secops-platform>

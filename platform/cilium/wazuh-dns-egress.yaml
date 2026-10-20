@@ -1,0 +1,25 @@
+# The dns rule sends lookups through Cilium's DNS proxy, which toFQDNs in
+# wazuh-manager.yaml depends on. Only in-namespace Service and headless pod
+# names resolve; the managers add cti.wazuh.com in wazuh-manager.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-cluster-dns
+  namespace: wazuh
+spec:
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*.wazuh.svc.cluster.local"
+              - matchPattern: "*.wazuh-cluster.wazuh.svc.cluster.local"

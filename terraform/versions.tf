@@ -17,4 +17,3 @@ terraform {
 provider "libvirt" {
   uri = "qemu+sshcmd://${var.libvirt_user}@${var.libvirt_host}/system"
 }
-

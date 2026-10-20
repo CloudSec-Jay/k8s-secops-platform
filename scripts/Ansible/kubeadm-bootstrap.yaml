@@ -38,3 +38,17 @@
         group: "{{ ansible_user }}"
         mode: '0600'
 
+    - name: Generate the worker join command
+      ansible.builtin.command:
+        cmd: kubeadm token create --print-join-command
+      register: kubeadm_join_command
+      changed_when: false
+
+- name: Join worker nodes to the cluster
+  hosts: workers
+  become: true
+  tasks:
+    - name: Join the Kubernetes cluster
+      ansible.builtin.command:
+        cmd: "{{ hostvars[groups['control_plane'][0]]['kubeadm_join_command']['stdout'] }}"
+        creates: /etc/kubernetes/kubelet.conf
