@@ -161,9 +161,54 @@ Once `wazuh-apid` initialized, all subsequent API requests returned **`HTTP 200 
 
 ---
 
+## Incident 5: Power Loss Exposes an Untested DNS Rule (Agent `Invalid ID`)
+
+### Symptom
+After the KVM host lost power and rebooted, all three VMs and every Wazuh pod returned to `Running`. A new agent (`wsl-desktop`, WSL on the LAN at `10.0.0.79`) enrolled successfully through the master on `10.0.0.241:1515`, but never appeared as active. The worker manager rejected every event connection:
+```text
+wazuh-remoted: WARNING: (1408): Invalid ID 001 for the source ip: '10.0.0.79' (name 'unknown').
+```
+
+### Root Cause Analysis
+1. **Split cluster:** `cluster_control -l` on the master listed only the master. The master issued agent key `001`, but with no worker connected it could not replicate the key, so the worker treated the agent as unknown.
+2. **Worker could not resolve the master:** The worker's `cluster.log` showed healthy keepalives until the outage (16:48 UTC), then:
+   ```text
+   ERROR: [Local Server] [Main] Could not connect to master: [Errno -2] Name or service not known.
+   ```
+3. **Cilium dropped the lookup:** Hubble showed the DNS proxy rejecting the query:
+   ```text
+   wazuh/wazuh-manager-worker-0 -> kube-system/coredns:53 dns-request proxy DROPPED
+     (DNS Query wazuh-manager-master-0.wazuh-cluster.wazuh. A)
+   ```
+   `allow-cluster-dns` permitted only `*.wazuh.svc.cluster.local` and `*.wazuh-cluster.wazuh.svc.cluster.local`. In Cilium `matchPattern`, `*` never crosses a dot, so neither the configured name `wazuh-manager-master-0.wazuh-cluster.wazuh` nor the search-path expansion the resolver tries first matched.
+4. **Why it had worked:** The worker's connection to the master predated the policy. Cilium does not tear down established flows, so the cluster kept running. The DNS lookup only happens on reconnect, so it never appeared in the Hubble flows the allow rules were written from. The power loss forced the first reconnect.
+
+### Resolution
+1. Added explicit patterns for the configured name and its search-path expansions to `platform/cilium/wazuh-dns-egress.yaml`:
+   ```yaml
+   - matchPattern: "*.wazuh-cluster.wazuh"
+   - matchPattern: "*.wazuh-cluster.wazuh.wazuh.svc.cluster.local"
+   - matchPattern: "*.wazuh-cluster.wazuh.cluster.local"
+   ```
+2. Applied the policy; the worker rejoined on its next 10-second retry without a restart:
+   ```text
+   NAME                    TYPE    VERSION  ADDRESS
+   wazuh-manager-master    master  4.14.8   wazuh-manager-master-0.wazuh-cluster.wazuh
+   wazuh-manager-worker-0  worker  4.14.8   10.244.1.163
+   ```
+3. Restarted the agent. `wsl-desktop` became active and alerts began arriving in the dashboard.
+4. Marked all three VMs for `virsh autostart` so they return after the next power loss.
+
+### Follow-up
+* Pod `Running` status did not reveal the split cluster. Monitor that `cluster_control -l` lists every manager node.
+* Policies built from observed flows miss traffic that only occurs on restart. Restart each component deliberately after a policy change and watch Hubble for drops.
+
+---
+
 ## Key Takeaways & Interview Talking Points
 
 1. **Kustomize Over Vendor Invasiveness:** Declarative overlays allow tailoring third-party Helm/manifest charts to bare-metal infrastructure without maintaining custom vendor forks.
 2. **Storage Topology Awareness:** `local-path` is hostPath-based; volume affinity strictly binds pods to specific worker nodes. Storage constraints directly impact the Kubernetes scheduling pipeline.
 3. **Host-Level Kubelet Protections:** Kubelet acts as a node watchdog. Understanding eviction thresholds (`imageGCHighThresholdPercent`) and conditions (`DiskPressure`, `MemoryPressure`) is essential for root-causing scheduling freezes.
 4. **Day 2 Live Operations vs. IaC:** Destructive Terraform replacements must never be applied blindly to stateful production nodes. Live hypervisor block resizing (`virsh blockresize` + `growpart`) followed by IaC state reconciliation is the industry-standard workflow.
+5. **Observed-Flow Policies Have Blind Spots:** Allow rules written from captured traffic only cover what happened during the capture. Long-lived connections hide reconnect-time lookups until a failure forces them, so test policy changes with deliberate restarts.

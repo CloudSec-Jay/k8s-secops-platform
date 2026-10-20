@@ -36,7 +36,7 @@
           <div><dt>Network</dt><dd>Cilium 1.20 · Hubble</dd></div>
           <div><dt>Detection</dt><dd>Wazuh v4.14.8</dd></div>
           <div><dt>Storage</dt><dd>local-path v0.0.37</dd></div>
-          <div><dt>Status</dt><dd><span class="status-dot"></span>Deployed · evidence in review</dd></div>
+          <div><dt>Status</dt><dd><span class="status-dot"></span>Running · endpoint enrolled</dd></div>
         </dl>
       </header>
 
@@ -209,6 +209,7 @@
           <div><span>INC-02 / NETWORK</span><h3>Image pulls timing out</h3><p>DNS returned IPv6 addresses for the registry CDN, but the libvirt bridge is IPv4-only, so pulls stalled before falling back.</p><strong>Fix: traced through kubelet events; the pull completed over IPv4 with cached layers kept.</strong></div>
           <div><span>INC-03 / CAPACITY</span><h3>Eviction loop on worker-2</h3><p>Vulnerability feeds, images, and the OS filled a 30 GiB disk. Kubelet tainted the node, and node-pinned volumes left the pod nowhere to go.</p><strong>Fix: online resize to 60 GiB with <code>virsh blockresize</code> and <code>growpart</code>, then Terraform reconciled.</strong></div>
           <div><span>INC-04 / STARTUP</span><h3>Dashboard login timeout</h3><p>The dashboard's 20-second API call reached the manager while its REST API was still cold-starting after the resize.</p><strong>Fix: confirmed from dashboard logs; requests returned 200 in about 200 ms once the API was up.</strong></div>
+          <div><span>INC-05 / RECOVERY</span><h3>Power loss split the manager cluster</h3><p>After the host lost power, every pod returned to Running, but the worker could not resolve the master: Cilium's DNS proxy dropped the lookup because <code>*</code> never crosses a dot. The rule was written from observed flows, and this lookup only happens on reconnect. New agents enrolled but were rejected as unknown.</p><strong>Fix: explicit DNS patterns for the cluster name; the worker rejoined on its next retry and the agent went active.</strong></div>
         </div>
         <p class="incident-link"><a href="https://github.com/CloudSec-Jay/k8s-secops-platform/blob/main/PROBLEM_SOLVED.md">Read the full case study ↗</a></p>
       </section>
@@ -217,17 +218,17 @@
         <div class="section-heading"><p>05</p><h2 id="evidence-title">Evidence before confidence</h2></div>
         <div class="evidence-path">
           <div><span>01</span><h3>Establish health</h3><p>Confirm kubeadm, Cilium, and the required platform components.</p><em class="observed">Observed · redaction in review</em></div>
-          <div><span>02</span><h3>Enroll an endpoint</h3><p>Verify authenticated ingestion into the Wazuh manager.</p><em>Pending</em></div>
-          <div><span>03</span><h3>Generate evidence</h3><p>Turn a harmless test event into a searchable, explainable alert.</p><em>Pending</em></div>
-          <div><span>04</span><h3>Exercise recovery</h3><p>Restart components and restore state from documented backups.</p><em>Pending</em></div>
+          <div><span>02</span><h3>Enroll an endpoint</h3><p>Verify authenticated ingestion into the Wazuh manager.</p><em class="observed">Observed · 2026-10-20</em></div>
+          <div><span>03</span><h3>Generate evidence</h3><p>Turn a harmless test event into a searchable, explainable alert.</p><em>Live alerts flowing · test event pending</em></div>
+          <div><span>04</span><h3>Exercise recovery</h3><p>Restart components and restore state from documented backups.</p><em>Partial · unplanned power loss, see INC-05</em></div>
         </div>
       </section>
 
       <section class="project-section current-state" aria-labelledby="state-title">
         <div class="section-heading"><p>06</p><h2 id="state-title">Current state</h2></div>
         <div class="state-layout">
-          <p class="state-callout">Running in the lab.<br><em>Evidence still required.</em></p>
-          <div class="prose"><p>The cluster is provisioned and bootstrapped from code, Cilium and local-path storage are in place, and the Wazuh stack reached a working dashboard after the incidents above were resolved.</p><p>The next step is proof rather than progress: enroll an endpoint, verify the complete signal path, test a safe detection, then exercise persistence and recovery, committing redacted evidence at each stage.</p></div>
+          <p class="state-callout">Endpoint enrolled.<br><em>Alerts flowing.</em></p>
+          <div class="prose"><p>The cluster is provisioned and bootstrapped from code, Cilium and local-path storage are in place, and the Wazuh stack reached a working dashboard after the incidents above were resolved.</p><p>A Linux endpoint is enrolled and its alerts reach the dashboard. An unplanned power loss tested recovery before any planned drill did: the platform came back, and the one gap it exposed is fixed and written up as INC-05.</p><p>Next: fire a deliberate, harmless test event end to end, run a planned restart drill that checks indexed data survives, and commit redacted evidence for each step.</p></div>
         </div>
       </section>
 
