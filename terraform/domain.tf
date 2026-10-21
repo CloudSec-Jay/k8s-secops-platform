@@ -19,7 +19,7 @@ resource "libvirt_domain" "node" {
   autostart = true
 
   devices = {
-    disks = [
+    disks = concat([
       {
         device = "disk"
 
@@ -61,7 +61,34 @@ resource "libvirt_domain" "node" {
           bus = "sata"
         }
       }
-    ]
+      ],
+      # Whole host disk for Garage backups, on the one node named in
+      # var.backup_disk. The serial gives the guest a stable
+      # /dev/disk/by-id/virtio-backup-ssd path whatever the kernel names it.
+      [
+        for disk in(var.backup_disk == null ? [] : [var.backup_disk]) : {
+          device = "disk"
+          serial = "backup-ssd"
+
+          driver = {
+            name  = "qemu"
+            type  = "raw"
+            cache = "none"
+            io    = "native"
+          }
+
+          source = {
+            block = {
+              dev = disk.device
+            }
+          }
+
+          target = {
+            dev = "vdb"
+            bus = "virtio"
+          }
+        } if disk.node == each.key
+    ])
 
     interfaces = [
       {
@@ -79,8 +106,12 @@ resource "libvirt_domain" "node" {
           }
         }
 
+        # Static addresses never appear as DHCP leases, so ask the guest
+        # agent. The network filter skips 127.0.0.1, which the agent
+        # reports before the NIC is configured.
         wait_for_ip = {
-          source  = "lease"
+          source  = "agent"
+          network = "192.168.100.0/24"
           timeout = 300
         }
       }

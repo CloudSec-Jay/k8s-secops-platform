@@ -1,0 +1,44 @@
+---
+# Enable CA-signed kubelet serving certificates on an existing cluster.
+# Kubernetes intentionally leaves these CSRs pending for administrator review.
+
+- name: Request kubelet serving certificates
+  hosts: k8s_cluster
+  become: true
+  gather_facts: false
+  serial: 1
+
+  tasks:
+    - name: Verify the active kubelet configuration exists
+      ansible.builtin.stat:
+        path: /var/lib/kubelet/config.yaml
+      register: kubelet_config
+      failed_when: not kubelet_config.stat.exists
+
+    - name: Enable kubelet serving certificate bootstrap
+      ansible.builtin.lineinfile:
+        path: /var/lib/kubelet/config.yaml
+        regexp: '^serverTLSBootstrap:'
+        line: 'serverTLSBootstrap: true'
+        insertafter: EOF
+        backup: true
+      notify: Restart kubelet
+
+    - name: Apply a pending kubelet restart before checking readiness
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for the node to return to Ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=Ready
+          node/{{ inventory_hostname }} --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      delegate_to: "{{ groups['control_plane'][0] }}"
+      changed_when: false
+
+  handlers:
+    - name: Restart kubelet
+      ansible.builtin.systemd_service:
+        name: kubelet
+        state: restarted

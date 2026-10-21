@@ -4,7 +4,8 @@ Terraform runs on the workstation containing this repository and reaches the
 libvirt host at `10.0.0.39` through the provider's native SSH transport. The
 Terraform source and state remain on the workstation.
 
-It creates three Ubuntu 24.04 VMs (`control-plane-1`, `worker-1`, `worker-2`)
+It creates four Ubuntu 26.04 VMs (`control-plane-1`, `worker-1`, `worker-2`,
+`worker-3`)
 from a checksum-pinned cloud image, configures them with cloud-init, and
 generates the Ansible inventory at `scripts/Ansible/k8s.ini`.
 
@@ -43,7 +44,7 @@ in the same shell that runs Terraform.
 
 ## Prerequisites on the workstation
 
-- The Ubuntu cloud image at `~/Downloads/ubuntu-24.04-server-cloudimg-amd64.img`
+- The Ubuntu cloud image at `~/Downloads/ubuntu-26.04/resolute-server-cloudimg-amd64.img`
   matching the SHA-256 pinned in `variables.tf`.
 - A separate Ed25519 key for the VMs at `~/.ssh/k8s_secops_lab`. Its public
   half is installed in each VM by cloud-init.

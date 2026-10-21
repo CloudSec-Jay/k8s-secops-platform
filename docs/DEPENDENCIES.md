@@ -26,16 +26,19 @@ working StorageClass must dynamically provision persistent volumes first.
 
 ## Reviewed version pins
 
-[`versions.env`](versions.env) is the source of truth for reviewed platform
+[`versions.env`](../versions.env) is the source of truth for reviewed platform
 versions.
 
 | Component | Reviewed version | Used by |
 |---|---:|---|
-| Kubernetes | `v1.37` minor | `kubeadm`, `kubelet`, and `kubectl` package repository |
-| Helm | `v3.22.1` | Install the pinned Cilium chart from the control plane |
+| Kubernetes | `v1.37.1` | `kubeadm`, `kubelet`, and `kubectl` package repository |
+| containerd | `2.2.2-0ubuntu1.1` | CRI runtime from the Ubuntu archive |
+| Helm | `v4.3.1` | Install pinned charts from the control plane |
 | Cilium | `1.20.2` | CNI, kube-proxy replacement, and Hubble |
 | Wazuh | `v4.14.8` | Upstream `wazuh/wazuh-kubernetes` release |
-| Ubuntu cloud image | `24.04`, release `20260926` | VM provisioning script |
+| local-path-provisioner | `v0.0.37` | Dynamic host-path storage for the lab |
+| Metrics Server chart | `3.14.0` | Kubernetes resource metrics API |
+| Ubuntu cloud image | `26.04`, release `20261016` | VM provisioning with Terraform |
 
 Do not infer compatibility only from this table. Review upstream release notes
 before changing a pin, and change the pin, runbook references, and validation
@@ -47,14 +50,15 @@ the platform runbooks, and validation aligned whenever a version changes.
 ## 1. KVM host dependencies
 
 The host must be a Linux system with hardware virtualization enabled and enough
-capacity for three VMs. The current reference topology needs at least 10 vCPUs,
-20 GiB of assignable memory, and 90 GiB of virtual disk capacity, plus headroom
-for the host and Wazuh data growth.
+capacity for four VMs. The current reference topology allocates 14 vCPUs,
+28 GiB of memory, and four sparse 90 GiB virtual disks, plus any optional backup
+disk passed through to `worker-3`.
 
-Run [`scripts/check-host.sh`](scripts/check-host.sh) to inspect CPU virtualization,
-memory, disk space, the libvirt network, and the libvirt service.
+Run [`scripts/check-host.sh`](../scripts/check-host.sh) to inspect CPU
+virtualization, memory, disk space, the libvirt network, and the libvirt
+service.
 
-VMs are provisioned by Terraform in [`terraform/`](terraform/README.md), which
+VMs are provisioned by Terraform in [`terraform/`](../terraform/README.md), which
 runs on the workstation and drives libvirt on the host over SSH. The host
 requires:
 
@@ -67,7 +71,7 @@ requires:
 | Active libvirt network | Give the VMs addressability | Default name: `default` |
 | Active libvirt storage pool | Hold the base image and VM disks | Default name: `default` |
 
-The workstation additionally needs Terraform and the pinned Ubuntu 24.04 cloud
+The workstation additionally needs Terraform and the pinned Ubuntu 26.04 cloud
 image; see the Terraform README for the image path, SHA-256, and SSH keys.
 
 Package names above are for an Ubuntu host. On another distribution, install
@@ -84,7 +88,7 @@ The machine driving the deployment needs:
 - `ssh` and `scp` access to every VM;
 - name resolution for the stable Kubernetes API endpoint;
 - `kubectl` compatible with the Kubernetes version-skew policy;
-- Helm 3 with OCI registry support;
+- a Helm client with OCI registry support;
 - the Cilium CLI for status and connectivity tests;
 - the Hubble CLI when validating flows; and
 - Git and outbound HTTPS access to retrieve reviewed upstream releases.
@@ -113,7 +117,7 @@ Every control-plane and worker VM must have:
 - only the firewall ports required by Kubernetes, Cilium, Wazuh, and the chosen
   administration path.
 
-Follow [`platform/kubeadm/README.md`](platform/kubeadm/README.md) for the
+Follow [`platform/kubeadm/README.md`](../platform/kubeadm/README.md) for the
 bootstrap order. The control plane must omit kube-proxy because Cilium replaces
 it.
 
@@ -135,7 +139,7 @@ healthy, and the connectivity test passes.
 
 Cilium is required before workloads can communicate or nodes become ready. Use
 the pinned chart and reviewed values in
-[`platform/cilium/`](platform/cilium/README.md). Hubble is the evidence source
+[`platform/cilium/`](../platform/cilium/README.md). Hubble is the evidence source
 for discovering required Wazuh flows before enforcing default-deny policy.
 
 ### Persistent storage
@@ -163,7 +167,7 @@ node failure. Provision a test claim and exercise the chosen recovery path.
 
 ## 5. Wazuh deployment dependencies
 
-Follow [`platform/wazuh/README.md`](platform/wazuh/README.md) only after the
+Follow [`platform/wazuh/README.md`](../platform/wazuh/README.md) only after the
 networking and storage gates pass. The deployment needs:
 
 - the pinned upstream `wazuh/wazuh-kubernetes` release;
@@ -173,7 +177,8 @@ networking and storage gates pass. The deployment needs:
 - a deliberate private exposure method for dashboard and agent traffic; and
 - explicit Cilium allow rules derived from observed required flows.
 
-Custom rules, endpoint settings, and integrations under `wazuh/content/` depend
+Custom rules, endpoint settings, and integrations under
+[`wazuh/content/`](../wazuh/content/) depend
 on a healthy base deployment. Test them with representative positive and
 negative events before promotion. Active-response examples remain disabled
 prototypes until they receive a safety review and test coverage.

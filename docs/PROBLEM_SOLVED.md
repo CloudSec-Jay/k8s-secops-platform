@@ -11,6 +11,7 @@ This document records the architectural challenges, root-cause analyses, and res
   * `control-plane-1` (`192.168.100.10`, 2 vCPU, 4 GiB RAM, 60 GiB disk)
   * `worker-1` (`192.168.100.21`, 4 vCPU, 8 GiB RAM, 60 GiB disk)
   * `worker-2` (`192.168.100.22`, 4 vCPU, 8 GiB RAM, 60 GiB disk)
+  * `worker-3` (`192.168.100.23`, 4 vCPU, 8 GiB RAM, 90 GiB disk)
 * **Kubernetes Version:** `v1.37.1` (bootstrapped with `kubeadm`, `containerd` with `SystemdCgroup=true`)
 * **CNI:** Cilium `v1.20.2` (eBPF kube-proxy replacement, Hubble UI enabled)
 * **Storage:** Rancher `local-path-provisioner` (`v0.0.37`) providing dynamic hostPath storage
