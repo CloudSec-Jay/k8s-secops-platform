@@ -1,6 +1,6 @@
-# Dedicated NAT network for the lab. DHCP reservations pin each node's IP to
-# its MAC address, so kubeadm gets stable addresses while the VMs keep the
-# default DHCP configuration from the cloud image.
+# Dedicated NAT network for the lab. Nodes get static addresses from
+# cloud-init (cloud-init/network-config.yml), so this resource does not depend
+# on local.nodes and adding or removing a node leaves the network untouched.
 resource "libvirt_network" "k8s_lab" {
   name      = "k8s-lab"
   autostart = true
@@ -15,8 +15,8 @@ resource "libvirt_network" "k8s_lab" {
 
   ips = [
     {
-      address = "192.168.100.1"
-      prefix  = 24
+      address = local.network_gateway
+      prefix  = local.network_prefix
 
       dhcp = {
         # Pool for anything not listed in local.nodes.
@@ -24,14 +24,6 @@ resource "libvirt_network" "k8s_lab" {
           {
             start = "192.168.100.100"
             end   = "192.168.100.199"
-          }
-        ]
-
-        hosts = [
-          for name, node in local.nodes : {
-            name = name
-            mac  = node.mac
-            ip   = node.ip
           }
         ]
       }

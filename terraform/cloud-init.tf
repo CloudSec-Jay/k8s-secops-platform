@@ -18,6 +18,16 @@ resource "libvirt_cloudinit_disk" "seed" {
       ssh_public_key = local.ssh_public_key
     }
   )
+
+  network_config = templatefile(
+    "${path.module}/cloud-init/network-config.yml",
+    {
+      mac     = each.value.mac
+      ip      = each.value.ip
+      prefix  = local.network_prefix
+      gateway = local.network_gateway
+    }
+  )
 }
 
 resource "libvirt_volume" "cloudinit" {

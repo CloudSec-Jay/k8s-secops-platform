@@ -1,0 +1,98 @@
+---
+# Install the pinned Metrics Server chart after kubelet serving CSRs are approved.
+
+- name: Verify kubelet serving certificates are present
+  hosts: k8s_cluster
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check for the current kubelet serving certificate
+      ansible.builtin.stat:
+        path: /var/lib/kubelet/pki/kubelet-server-current.pem
+      register: kubelet_server_certificate
+
+    - name: Require an approved kubelet serving certificate
+      ansible.builtin.assert:
+        that:
+          - kubelet_server_certificate.stat.exists
+        fail_msg: >-
+          {{ inventory_hostname }} has no approved kubelet serving certificate.
+          Inspect and approve its kubernetes.io/kubelet-serving CSR first.
+        quiet: true
+
+- name: Install Metrics Server on the control plane
+  hosts: control_plane
+  become: true
+  gather_facts: false
+
+  vars:
+    metrics_server_values_path: /etc/kubernetes/metrics-server-values.yaml
+    metrics_server_policy_path: /etc/kubernetes/metrics-server-policy.yaml
+
+  tasks:
+    - name: Verify cluster administrator configuration exists
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_conf
+      failed_when: not admin_conf.stat.exists
+
+    - name: Stage the reviewed Metrics Server values
+      ansible.builtin.copy:
+        src: ../../platform/metrics-server/values.yaml
+        dest: "{{ metrics_server_values_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Stage the Metrics Server Cilium policy
+      ansible.builtin.copy:
+        src: ../../platform/cilium/metrics-server.yaml
+        dest: "{{ metrics_server_policy_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply the Metrics Server Cilium policy
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ metrics_server_policy_path }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: metrics_server_policy_apply
+      changed_when: >-
+        ' created' in metrics_server_policy_apply.stdout or
+        ' configured' in metrics_server_policy_apply.stdout
+
+    - name: Deploy or upgrade Metrics Server via Helm
+      kubernetes.core.helm:
+        name: metrics-server
+        chart_ref: metrics-server
+        chart_repo_url: https://kubernetes-sigs.github.io/metrics-server/
+        chart_version: "{{ metrics_server_chart_version }}"
+        release_namespace: kube-system
+        create_namespace: false
+        kubeconfig: /etc/kubernetes/admin.conf
+        values_files:
+          - "{{ metrics_server_values_path }}"
+        wait: true
+        timeout: "5m"
+
+    - name: Wait for the Metrics APIService to become available
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=Available
+          apiservice/v1beta1.metrics.k8s.io --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    - name: Verify metrics are available for every node
+      ansible.builtin.command:
+        cmd: kubectl top nodes
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: node_metrics
+      changed_when: false
+      retries: 12
+      delay: 5
+      until: node_metrics.rc == 0

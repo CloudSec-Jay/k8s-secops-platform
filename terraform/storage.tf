@@ -1,7 +1,7 @@
 # When upgrading the image, update this name together with source_image_path
 # and its pinned SHA-256 in variables.tf.
 resource "libvirt_volume" "ubuntu_base" {
-  name = "ubuntu-24.04-20260926-amd64-base.qcow2"
+  name = "ubuntu-26.04-20261016-amd64-base.qcow2"
   pool = var.storage_pool
 
   target = {
@@ -27,7 +27,7 @@ resource "libvirt_volume" "os_disk" {
   name = "${each.key}.qcow2"
   pool = var.storage_pool
 
-  capacity      = 60
+  capacity      = 90
   capacity_unit = "GiB"
   allocation    = 0
 

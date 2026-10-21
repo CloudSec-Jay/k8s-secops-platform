@@ -18,18 +18,38 @@
     kubernetes_kernel_modules:
       - overlay
       - br_netfilter
+      # Longhorn attaches volumes to pods over a node-local iSCSI session.
+      - iscsi_tcp
     kubernetes_sysctls:
       net.bridge.bridge-nf-call-iptables: "1"
       net.bridge.bridge-nf-call-ip6tables: "1"
       net.ipv4.ip_forward: "1"
 
   tasks:
-    - name: Install containerd
+    - name: Install the pinned containerd package
       ansible.builtin.apt:
-        name: containerd
+        name: "containerd={{ containerd_package_version }}"
         state: present
         update_cache: true
         cache_valid_time: 3600
+
+    # Upgrade containerd deliberately by bumping containerd_package_version,
+    # never as a side effect of apt upgrade.
+    - name: Hold containerd at the pinned version
+      ansible.builtin.dpkg_selections:
+        name: containerd
+        selection: hold
+
+    - name: Install the Longhorn iSCSI initiator
+      ansible.builtin.apt:
+        name: open-iscsi
+        state: present
+
+    - name: Enable and start the iSCSI daemon
+      ansible.builtin.systemd_service:
+        name: iscsid
+        enabled: true
+        state: started
 
     - name: Disable active swap
       ansible.builtin.command: swapoff --all

@@ -1,0 +1,16 @@
+version: 2
+ethernets:
+  # Matched by MAC so the config applies whatever the kernel names the NIC.
+  # No set-name: Cilium's L2 announcement policy selects the kernel name.
+  lab:
+    match:
+      macaddress: "${mac}"
+    dhcp4: false
+    addresses:
+      - ${ip}/${prefix}
+    routes:
+      - to: default
+        via: ${gateway}
+    nameservers:
+      addresses:
+        - ${gateway}

@@ -1,0 +1,20 @@
+---
+# Metrics Server Helm overrides for the kubeadm lab.
+# The chart version is pinned separately by the Ansible deployment.
+defaultArgs:
+  - --cert-dir=/tmp
+  - --kubelet-preferred-address-types=InternalIP
+  - --kubelet-use-node-status-port
+  - --metric-resolution=15s
+
+# Trust kubelet serving certificates signed by the kubeadm cluster CA.
+args:
+  - --kubelet-certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+# Verify TLS from the kube-apiserver to Metrics Server as well.
+apiService:
+  insecureSkipTLSVerify: false
+
+# Have Helm create and retain the Metrics Server serving certificate.
+tls:
+  type: helm

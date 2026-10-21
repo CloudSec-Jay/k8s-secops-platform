@@ -3,3 +3,10 @@
 # include sensitive data. This example remains safe to commit.
 libvirt_user = "your-remote-account"
 vm_user      = "your-vm-account"
+
+# Optional: a whole host disk for Garage backups. Find the path on the
+# libvirt host with `ls -l /dev/disk/by-id/`. The disk is erased.
+# backup_disk = {
+#   node   = "worker-3"
+#   device = "/dev/disk/by-id/usb-Vendor_Model_SERIAL-0:0"
+# }
