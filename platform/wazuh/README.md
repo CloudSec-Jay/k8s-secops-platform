@@ -1,4 +1,4 @@
-# Wazuh on the VM Cluster
+# Wazuh on the Lab Cluster
 
 The platform deploys Wazuh from the official `wazuh/wazuh-kubernetes` repository. This repository keeps the lab-specific runbook and detection content while leaving upstream manifests at a visible, pinned vendor boundary.
 
@@ -25,13 +25,13 @@ kubectl get storageclass
 kubectl get csidriver
 ```
 
-The official local overlay contains storage assumptions that must be reconciled with this kubeadm VM cluster. In the staged tree, inspect:
+The cluster's default StorageClass is Longhorn (`longhorn-node-prep.yaml`), with two replicas per volume, one on each laptop worker. The official local overlay contains storage assumptions that must be reconciled with it. In the staged tree, inspect:
 
 - `envs/local-env/storage-class.yaml`
 - `envs/local-env/indexer-resources.yaml`
 - `envs/local-env/wazuh-resources.yaml`
 
-Match the StorageClass provisioner to the installed CSI driver. Size claims for index retention and manager queues; the small local defaults are development values, not durability targets.
+Match the StorageClass provisioner to the installed CSI driver (`driver.longhorn.io`). Size claims for index retention and manager queues; the small local defaults are development values, not durability targets. Longhorn copies every write over Wi-Fi to the other worker, so expect higher write latency for the indexer than on a single disk. Schedule the indexer on `worker-2`, which has the most memory.
 
 ## 3. Generate or supply TLS certificates
 
@@ -66,11 +66,7 @@ Do not apply the repository's default-deny example to the Wazuh namespace until 
 
 ## 6. Expose services deliberately
 
-Cloud `LoadBalancer` services do not automatically receive external addresses on a bare-metal or VM-only cluster. Select and document one lab-appropriate mechanism:
-
-- a private load-balancer implementation for the VM network;
-- an ingress or gateway with TLS and restricted source networks; or
-- temporary administrator-only `kubectl port-forward` access.
+Cloud `LoadBalancer` services do not automatically receive external addresses on a bare-metal cluster. This lab uses Cilium LB-IPAM with L2 announcements on the home LAN ([`../cilium/README.md`](../cilium/README.md#lan-exposure)) and the Gateway API listener for the dashboard ([`../gateway-api/README.md`](../gateway-api/README.md)). For temporary administrator-only access, use `kubectl port-forward`.
 
 Agent traffic typically needs separate enrollment and event endpoints. Bind them to private lab addresses and restrict source CIDRs. Do not expose the indexer directly.
 

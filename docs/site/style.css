@@ -139,6 +139,8 @@ h1 em { color: var(--accent); font-weight: 400; }
 .map-scroll { overflow-x: auto; padding: 20px; }
 .map-scroll:focus-visible { outline: 3px solid var(--green); outline-offset: -3px; }
 .map-scroll svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.map-scroll img { display: block; width: 100%; min-width: 760px; height: auto; background: #FFFFFF; }
+.infra-map figcaption a { color: var(--accent); }
 .z-out { fill: var(--paper); stroke: var(--line); }
 .z-host { fill: rgb(245 239 225 / .9); stroke: var(--accent); }
 .z-net { fill: var(--accent-soft); }

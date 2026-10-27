@@ -6,12 +6,15 @@ both directions and does not use `--kubelet-insecure-tls`.
 
 ## 1. Request kubelet serving certificates
 
-The kubeadm template enables `serverTLSBootstrap` for future clusters. Enable
-the same setting on the running nodes with a rolling kubelet restart:
+The kubeadm template enables `serverTLSBootstrap`, so a cluster built by
+`site.yaml` already requests serving certificates when each node joins. Until
+they are approved, `kubectl exec` and `kubectl logs` fail with
+`tls: internal error`. Only a cluster built before that setting needs it
+enabled on the running nodes, with a rolling kubelet restart:
 
 ```bash
 cd scripts/Ansible
-ansible-playbook -i k8s.ini kubelet-serving-certificates.yaml
+ansible-playbook kubelet-serving-certificates.yaml -K
 ```
 
 Kubernetes does not automatically approve kubelet serving certificates. List
@@ -54,8 +57,14 @@ and installs the pinned Helm chart:
 
 ```bash
 cd scripts/Ansible
-ansible-playbook -i k8s.ini metrics-server-install.yaml
+ansible-playbook metrics-server-install.yaml -K
 ```
+
+The policy is part of
+[`platform/cilium/manifests/kube-system.yaml`](../cilium/manifests/kube-system.yaml),
+so this playbook also applies the CoreDNS and Hubble policies in that file.
+Check the DNS prerequisite in [`../cilium/README.md`](../cilium/README.md)
+first.
 
 The values file makes Metrics Server select node `InternalIP` addresses and
 verify kubelet certificates with the kubeadm cluster CA. The chart generates a

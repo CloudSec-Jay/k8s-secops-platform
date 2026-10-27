@@ -1,10 +1,19 @@
 # Operational Case Study: Kubernetes SecOps Platform Deployment & Troubleshooting
 
-This document records the architectural challenges, root-cause analyses, and resolutions encountered while deploying a multi-node Kubernetes SecOps platform running Cilium (eBPF) and upstream Wazuh v4.14.8 on KVM/libvirt virtual machines.
+This document records the architectural challenges, root-cause analyses, and resolutions encountered while deploying a multi-node Kubernetes SecOps platform running Cilium (eBPF) and upstream Wazuh v4.14.8. Incidents 1 to 6 happened on the original KVM/libvirt virtual machines; Incidents 7 to 9 happened while rebuilding the lab as a hybrid cluster.
 
 ---
 
 ## Architecture Summary
+
+### Current hybrid cluster (from 2026-10-26)
+
+* **Control plane:** `control-plane-1`, a Hyper-V Generation 2 VM on a Windows 11 desktop, bridged onto the home LAN (2 vCPU, 8 GiB RAM, 40 GiB disk)
+* **Workers:** `worker-1` (Dell XPS 13 9360, 8 threads, 8 GiB) and `worker-2` (Dell XPS 15 9510, 16 threads, 32 GiB), bare metal on Wi-Fi with LUKS-encrypted disks
+* **OS:** Rocky Linux 10.2 on every node, SELinux enforcing with containerd container labeling
+* **Kubernetes, CNI:** unchanged versions, below; every node has its own LAN address with no NAT between nodes
+
+### Original libvirt build (Incidents 1 to 6)
 
 * **Hypervisor / Host:** KVM / libvirt on Ubuntu 24.04 (`10.0.0.39`)
 * **Cluster Nodes:**
@@ -14,7 +23,7 @@ This document records the architectural challenges, root-cause analyses, and res
   * `worker-3` (`192.168.100.23`, 4 vCPU, 8 GiB RAM, 90 GiB disk)
 * **Kubernetes Version:** `v1.37.1` (bootstrapped with `kubeadm`, `containerd` with `SystemdCgroup=true`)
 * **CNI:** Cilium `v1.20.2` (eBPF kube-proxy replacement, Hubble UI enabled)
-* **Storage:** Rancher `local-path-provisioner` (`v0.0.37`) providing dynamic hostPath storage
+* **Storage:** Longhorn `v1.12.1` (distributed, replicated block storage as default StorageClass) + Rancher `local-path-provisioner` (`v0.0.37`) as local fallback
 * **Workload:** Upstream Wazuh `v4.14.8` (Indexer, Dashboard, Manager Master, Manager Worker)
 
 ---
@@ -206,6 +215,154 @@ wazuh-remoted: WARNING: (1408): Invalid ID 001 for the source ip: '10.0.0.79' (n
 
 ---
 
+## Incident 6: Zero-Trust Cluster Default-Deny Blocks Distributed CSI Storage Engine (Longhorn)
+
+### Symptom
+After scaling the cluster to three worker nodes and installing Longhorn via Helm, the deployment hung indefinitely at `TASK [Deploy or upgrade Longhorn via Helm]` with `wait: true`:
+1. `longhorn-manager` pods were stuck at `1/2 Running` with readiness probe failing on `https://:9502/v1/healthz` (`dial tcp: connect: connection refused`).
+2. `longhorn-driver-deployer` was blocked in `Init:0/1` waiting on the manager.
+3. `longhorn-ui` crashed repeatedly in `CrashLoopBackOff`:
+   ```text
+   nginx: [emerg] host not found in upstream "longhorn-backend" in /var/config/nginx/nginx.conf:34
+   ```
+
+### Root Cause Analysis
+1. **API Server Timeout in Pod Logs:** Inspecting `longhorn-manager` container logs revealed repeated 30-second timeouts trying to acquire the leader election lease lock:
+   ```text
+   leaderelection.go:461] "Error retrieving lease lock" err="Get \"https://10.96.0.1:443/apis/coordination.k8s.io/v1/namespaces/longhorn-system/leases/longhorn-manager-webhook-lock\": dial tcp 10.96.0.1:443: i/o timeout"
+   ```
+2. **Node-Level Network was Healthy:** Direct testing from `worker-3` proved host networking was fully operational:
+   * ICMP ping to control plane: `0.38 ms` (0% loss)
+   * Direct TCP socket to `192.168.100.10:6443`: `OPEN`
+   * ClusterIP socket to `10.96.0.1:443`: `OPEN`
+   * Host firewall: `sudo ufw status` $\rightarrow$ `inactive`
+3. **Cilium eBPF Default-Deny Dropping Pod Traffic:** Because the cluster enforces a Zero-Trust baseline ([`platform/cilium/cluster-default-deny.yaml`](../platform/cilium/manifests/cluster.yaml) (now `manifests/cluster.yaml`)), every new namespace defaults to dropping all ingress and egress packets. The newly created `longhorn-system` namespace had no allow rules. Cilium's eBPF datapath dropped the pods' outbound SYN packets to `10.96.0.1:443` and dropped CoreDNS queries to `kube-dns:53`.
+
+```text
+longhorn-manager (pod: 10.244.3.73)
+       │
+       ▼ (Egress to 10.96.0.1:443)
+[ Cilium eBPF Datapath ]
+       │
+       ▼ (No CiliumNetworkPolicy for longhorn-system)
+   ❌ DROPPED (CiliumClusterwideNetworkPolicy: default-deny)
+       │
+       ▼
+Result: i/o timeout -> Lease lock fails -> Port 9502 never opens -> Kubelet reports connection refused!
+```
+
+### Resolution
+1. Authored a custom zero-trust policy in [`platform/cilium/longhorn-allow.yaml`](../platform/cilium/manifests/longhorn.yaml) (now `manifests/longhorn.yaml`) scoped to `namespace: longhorn-system`:
+   * **API Server Egress:** Allowed `toEntities: [kube-apiserver]` on ports `6443` and `443` for lease management and CRD sync.
+   * **CoreDNS Egress:** Allowed `toEndpoints` matching `k8s-app: kube-dns` in `kube-system` on port `53/ANY`.
+   * **Internal Pod Mesh:** Allowed full ingress/egress among pods in `longhorn-system` for manager-to-webhook API and replica data synchronization.
+   * **Node & Host Communication:** Allowed `fromEntities: [host, remote-node]` and `toEntities: [host, remote-node]` for Kubelet `/v1/healthz` probes and node-local iSCSI attachments (`iscsid`).
+2. Applied the policy to the cluster:
+   ```bash
+   kubectl apply -f platform/cilium/longhorn-allow.yaml
+   ```
+3. **Verification:** The instant Cilium loaded the eBPF policy into the kernel:
+   * `longhorn-manager` acquired the lease lock and transitioned to `2/2 Running`.
+   * `longhorn-driver-deployer` completed initialization (`1/1 Running`).
+   * `longhorn-ui` resolved upstream DNS and stabilized (`1/1 Running`).
+   * All 27 storage pods across all 3 nodes stabilized in `Running` state.
+   * `longhorn` registered as the cluster's default dynamic StorageClass with live volume expansion enabled:
+     ```text
+     NAME                 PROVISIONER          RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION
+     local-path           rancher.io/local-path Delete          WaitForFirstConsumer false
+     longhorn (default)   driver.longhorn.io   Delete          Immediate           true
+     ```
+
+### Follow-up
+* In a zero-trust cluster, new infrastructure namespaces (storage, observability, service mesh) *must* have their baseline network policies staged and applied alongside Helm deployments.
+* When a pod's readiness probe reports `connection refused` on an admission webhook port, check the container logs for blocked upstream dependencies (e.g. API server leases) before assuming a container binary or port crash.
+
+---
+
+## Incident 7: SELinux Denies the Control Plane Its Own Keys
+
+### Symptom
+The first `kubeadm init` on the hybrid cluster failed after about 100 seconds:
+
+```text
+error execution phase wait-control-plane: could not bootstrap the admin user in file admin.conf:
+  dial tcp <control-plane>:6443: connect: connection refused
+```
+
+Certificates, kubeconfigs, and static Pod manifests had all been written. The kubelet log showed etcd, kube-apiserver, kube-controller-manager, and kube-scheduler all in `CrashLoopBackOff` at the same time.
+
+### Root Cause Analysis
+1. When every control-plane component fails together, the cause is usually something they share. The containerd and kubelet cgroup drivers matched (`SystemdCgroup = true`, `cgroupDriver: systemd`), so the runtime configuration was ruled out.
+2. `ausearch -m avc` showed the denials:
+
+   ```text
+   avc: denied { read } for comm="kube-apiserver" name="sa.key"
+     scontext=system_u:system_r:container_t:s0:c447,c900
+     tcontext=unconfined_u:object_r:kubernetes_file_t:s0 tclass=file
+   ```
+
+3. The rebuild turned on containerd's `enable_selinux`, so containers run as `container_t`. The `container-selinux` policy labels `/etc/kubernetes` as `kubernetes_file_t`, which `container_t` may not read. Every static pod failed to open its keys and kubeconfigs (`EACCES`) and exited.
+4. The libvirt build had never run with container labeling, so this combination had not been tested before.
+
+### Resolution
+The options were relabeling `/etc/kubernetes` as `container_file_t` (any container mounting it could then read the cluster CA key), switching SELinux to permissive (as the upstream kubeadm guide suggests), or scoping an exception. The fix scopes it: `kubeadm-bootstrap.yaml` writes one kubeadm patch per control-plane component to `/etc/kubernetes/patches`:
+
+```yaml
+spec:
+  securityContext:
+    seLinuxOptions:
+      type: spc_t
+```
+
+and the kubeadm configuration points `patches.directory` at that folder.
+
+### Verification
+```bash
+ps -eZ | grep -E 'kube-apiserver|etcd'
+# system_u:system_r:spc_t:s0:... kube-apiserver
+# system_u:system_r:spc_t:s0:... etcd
+```
+
+Only the four control-plane pods report `spc_t`; every other pod runs as the default `container_t`.
+
+---
+
+## Incident 8: A Re-run Would Have Skipped the Failed Init
+
+### Symptom
+After Incident 7, re-running `site.yaml` would have reported the init task as already done.
+
+### Root Cause Analysis
+The init task used `creates: /etc/kubernetes/admin.conf`. kubeadm writes `admin.conf` during the kubeconfig phase, before the control plane starts, so a failed init leaves it behind. The guard treated "the file exists" as "init succeeded", and later plays would have run against a control plane that was not serving.
+
+### Resolution
+The playbook now checks the API server instead of a file:
+
+1. `kubectl get --raw=/readyz` with the admin kubeconfig. If it succeeds, init is skipped.
+2. If it fails and `admin.conf` does not exist, init runs.
+3. If it fails but `admin.conf` exists, the play stops with instructions to fix the cause and run `kubeadm reset -f`.
+
+### Verification
+The next run stopped at the new guard, as intended. After `kubeadm reset -f`, init succeeded and both workers joined.
+
+---
+
+## Incident 9: Helm Disappears Under `sudo`
+
+### Symptom
+`helm-install.yaml` failed at its version check with `rc=2` and empty stdout and stderr, although `/usr/local/bin/helm version` worked for the `kubeadmin` user.
+
+### Root Cause Analysis
+Ansible runs these tasks through `sudo`. Rocky Linux's sudoers `secure_path` does not include `/usr/local/bin`, so root could not find `helm` by name and the command module reported "Error executing command". The cloud image used on the libvirt build had not exposed this. Every `kubernetes.core.helm` task would have failed the same way.
+
+### Resolution
+A single variable in `group_vars/k8s_cluster.yml`, `helm_binary: /usr/local/bin/helm`, is used by the install destination, both version checks, and `binary_path` on every Helm module call. Loosening `secure_path` was rejected because it is deliberate hardening.
+
+### Verification
+`site.yaml` completed with no failures; Cilium installed through Helm, and all three nodes reported `Ready`.
+
+---
+
 ## Key Takeaways & Interview Talking Points
 
 1. **Kustomize Over Vendor Invasiveness:** Declarative overlays allow tailoring third-party Helm/manifest charts to bare-metal infrastructure without maintaining custom vendor forks.
@@ -213,3 +370,7 @@ wazuh-remoted: WARNING: (1408): Invalid ID 001 for the source ip: '10.0.0.79' (n
 3. **Host-Level Kubelet Protections:** Kubelet acts as a node watchdog. Understanding eviction thresholds (`imageGCHighThresholdPercent`) and conditions (`DiskPressure`, `MemoryPressure`) is essential for root-causing scheduling freezes.
 4. **Day 2 Live Operations vs. IaC:** Destructive Terraform replacements must never be applied blindly to stateful production nodes. Live hypervisor block resizing (`virsh blockresize` + `growpart`) followed by IaC state reconciliation is the industry-standard workflow.
 5. **Observed-Flow Policies Have Blind Spots:** Allow rules written from captured traffic only cover what happened during the capture. Long-lived connections hide reconnect-time lookups until a failure forces them, so test policy changes with deliberate restarts.
+6. **Zero-Trust Network Boundaries Demand Day-0 Provisioning:** When running cluster-wide default-deny (`CiliumClusterwideNetworkPolicy`), third-party helm installations with `wait: true` will fail silently if pod-to-API and DNS egress policies are omitted. Isolate node vs pod reachability to pinpoint eBPF policy drops.
+7. **Scope SELinux Exceptions Instead of Disabling It:** An AVC denial names the process, its label, and the file's label. Fixing it for exactly the components that need it (`spc_t` on four static pods) keeps every workload confined.
+8. **Idempotency Guards Must Test the Outcome:** A marker file written partway through a step does not prove the step finished. Check the state that matters, such as a serving API, and fail loudly on partial state.
+9. **Privilege Changes the Environment:** `sudo` replaces `PATH` with `secure_path`. Use full paths for binaries installed outside the distribution's directories.
