@@ -1,0 +1,14 @@
+name = "rocky10-k8s-base"
+description = "Bare Rocky Linux 10 base shared by Kubernetes control-plane and worker nodes"
+version = "0.1.0"
+
+packages = [
+  { name = "cloud-init" },
+  { name = "openssh-server" },
+  { name = "python3" },
+  { name = "qemu-guest-agent" },
+  { name = "sudo" },
+]
+
+[customizations.services]
+enabled = ["qemu-guest-agent", "sshd"]

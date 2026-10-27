@@ -1,7 +1,7 @@
 # When upgrading the image, update this name together with source_image_path
 # and its pinned SHA-256 in variables.tf.
-resource "libvirt_volume" "ubuntu_base" {
-  name = "ubuntu-26.04-20261016-amd64-base.qcow2"
+resource "libvirt_volume" "base_image" {
+  name = "rocky-10.2-20260525.0-amd64-base.qcow2"
   pool = var.storage_pool
 
   target = {
@@ -32,7 +32,7 @@ resource "libvirt_volume" "os_disk" {
   allocation    = 0
 
   backing_store = {
-    path = libvirt_volume.ubuntu_base.path
+    path = libvirt_volume.base_image.path
 
     format = {
       type = "qcow2"
@@ -49,7 +49,26 @@ resource "libvirt_volume" "os_disk" {
   # rebuilt whenever the base image is replaced.
   lifecycle {
     replace_triggered_by = [
-      libvirt_volume.ubuntu_base
+      libvirt_volume.base_image
     ]
+  }
+}
+
+resource "libvirt_volume" "longhorn_disk" {
+  for_each = {
+    for name, node in local.nodes : name => node
+    if node.role == "worker"
+  }
+
+  name          = "${each.key}-longhorn.qcow2"
+  pool          = var.storage_pool
+  capacity      = var.longhorn_disk_size_gib
+  capacity_unit = "GiB"
+  allocation    = 0
+
+  target = {
+    format = {
+      type = "qcow2"
+    }
   }
 }

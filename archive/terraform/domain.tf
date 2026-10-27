@@ -84,11 +84,38 @@ resource "libvirt_domain" "node" {
           }
 
           target = {
-            dev = "vdb"
+            dev = "vdc"
             bus = "virtio"
           }
         } if disk.node == each.key
-    ])
+      ],
+      # Dedicated Longhorn data disk on each worker. The serial gives the
+      # guest a stable /dev/disk/by-id/virtio-longhorn path.
+      [
+        for name in keys(libvirt_volume.longhorn_disk) : {
+          device = "disk"
+          serial = "longhorn"
+
+          driver = {
+            name  = "qemu"
+            type  = "qcow2"
+            cache = "none"
+            io    = "native"
+          }
+
+          source = {
+            file = {
+              file = libvirt_volume.longhorn_disk[name].path
+            }
+          }
+
+          target = {
+            dev = "vdb"
+            bus = "virtio"
+          }
+        } if name == each.key
+      ]
+    )
 
     interfaces = [
       {

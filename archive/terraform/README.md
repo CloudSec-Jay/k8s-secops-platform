@@ -1,10 +1,12 @@
 # Remote libvirt Terraform
 
+> **Archived.** The lab no longer runs on libvirt VMs. The control plane is a Hyper-V VM ([`scripts/HyperV/`](../../scripts/HyperV/New-K8sControlPlaneVM.ps1)) and the workers are bare-metal laptops, so this code is kept for reference only. Paths below are as they were before the move: the inventory is now written by hand from [`scripts/Ansible/k8s.ini.example`](../../scripts/Ansible/k8s.ini.example), and the former libvirt host is now `worker-2`.
+
 Terraform runs on the workstation containing this repository and reaches the
 libvirt host at `10.0.0.39` through the provider's native SSH transport. The
 Terraform source and state remain on the workstation.
 
-It creates four Ubuntu 26.04 VMs (`control-plane-1`, `worker-1`, `worker-2`,
+It creates four Rocky Linux 10 VMs (`control-plane-1`, `worker-1`, `worker-2`,
 `worker-3`)
 from a checksum-pinned cloud image, configures them with cloud-init, and
 generates the Ansible inventory at `scripts/Ansible/k8s.ini`.
@@ -44,7 +46,8 @@ in the same shell that runs Terraform.
 
 ## Prerequisites on the workstation
 
-- The Ubuntu cloud image at `~/Downloads/ubuntu-26.04/resolute-server-cloudimg-amd64.img`
+- The Rocky Linux 10 GenericCloud-Base image at
+  `~/Downloads/rocky-10/Rocky-10-GenericCloud-Base-10.2-20260525.0.x86_64.qcow2`
   matching the SHA-256 pinned in `variables.tf`.
 - A separate Ed25519 key for the VMs at `~/.ssh/k8s_secops_lab`. Its public
   half is installed in each VM by cloud-init.
@@ -83,11 +86,13 @@ DHCP addresses.
 ## Known provider issues (dmacvicar/libvirt 0.9.9)
 
 - **Disks reference file paths, not pool volumes.** With volume-type disks,
-  QEMU was denied access to the backing base image on the Ubuntu host. Using
-  `source.file` avoids this without disabling AppArmor.
+  QEMU was denied access to the backing base image on the former Ubuntu
+  host (AppArmor). Using `source.file` avoids this; on the Rocky host the pool
+  must stay under an SELinux `virt_image_t` path such as
+  `/var/lib/libvirt/images`.
 - **Volume changes need `-replace`.** The provider can plan an in-place
   volume update and then reject it with "Update Not Supported". Force the
   replacement instead, for example
-  `terraform plan -out=tfplan -replace='libvirt_volume.ubuntu_base'`.
+  `terraform plan -out=tfplan -replace='libvirt_volume.base_image'`.
 - **Console `pty` needs a path.** The serial console omits `source`, and
   libvirt allocates a pty automatically.

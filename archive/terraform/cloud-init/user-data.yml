@@ -6,7 +6,7 @@ ssh_pwauth: false
 
 users:
   - name: ${vm_user}
-    groups: [sudo]
+    groups: [wheel]
     shell: /bin/bash
     # Lab trade-off: passwordless sudo lets Ansible run without a become
     # password. Login is key-only (lock_passwd, ssh_pwauth: false), so sudo

@@ -15,20 +15,20 @@ variable "storage_pool" {
   default     = "default"
 }
 
-# Ubuntu 26.04 (resolute) server cloud image, serial 20261016, from
-# https://cloud-images.ubuntu.com/releases/26.04/release-20261016/
-# SHA-256 taken from that release's GPG-signed SHA256SUMS.
+# Rocky Linux 10.2 GenericCloud-Base image, build 20260525.0, from
+# https://dl.rockylinux.org/pub/rocky/10/images/x86_64/
+# SHA-256 taken from that image's .CHECKSUM file.
 variable "source_image_path" {
-  description = "Pinned Ubuntu cloud image path"
+  description = "Pinned Rocky Linux cloud image path"
   type        = string
-  default     = "~/Downloads/ubuntu-26.04/resolute-server-cloudimg-amd64.img"
+  default     = "~/Downloads/rocky-10/Rocky-10-GenericCloud-Base-10.2-20260525.0.x86_64.qcow2"
 
   validation {
     condition = try(
-      filesha256(pathexpand(var.source_image_path)) == "5645d0318ad21f643ebb1ac4567514620e9893380b07b0201fda163baa5b7eb5",
+      filesha256(pathexpand(var.source_image_path)) == "9fc9e9ff16888bb68ac39b0392e25c9c92684d50c85f1cce6ab549363bbc4b48",
       false
     )
-    error_message = "The Ubuntu image is missing or its SHA-256 does not match the pinned release."
+    error_message = "The Rocky Linux image is missing or its SHA-256 does not match the pinned release."
   }
 }
 
@@ -66,4 +66,10 @@ variable "ssh_public_key_path" {
     )
     error_message = "ssh_public_key_path must reference a readable Ed25519 public key."
   }
+}
+
+variable "longhorn_disk_size_gib" {
+  description = "Size in GiB of each dedicated Longhorn worker data disk."
+  type        = number
+  default     = 75
 }
