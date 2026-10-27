@@ -1,0 +1,103 @@
+---
+# Keep the laptop workers awake and on the network. Safe to re-run.
+#
+# A laptop node that suspends drops out of the cluster: its pods are evicted
+# after the taint timeout, and Longhorn replicas on it go stale. Power the
+# nodes off with `poweroff` instead; never let them sleep.
+
+- name: Prepare the bare-metal laptop nodes
+  hosts: baremetal
+  become: true
+  gather_facts: false
+
+  vars:
+    sleep_targets:
+      - sleep.target
+      - suspend.target
+      - hibernate.target
+      - hybrid-sleep.target
+
+  tasks:
+    - name: Create the logind drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/logind.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    # Covers every lid state: on battery, on AC, and docked.
+    - name: Ignore the lid switch
+      ansible.builtin.copy:
+        dest: /etc/systemd/logind.conf.d/10-k8s-node-lid.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Login]
+          HandleLidSwitch=ignore
+          HandleLidSwitchExternalPower=ignore
+          HandleLidSwitchDocked=ignore
+      notify: Restart systemd-logind
+
+    # Masking blocks suspend from every source, including the power button,
+    # idle timers, and `systemctl suspend`.
+    - name: Mask the sleep targets
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        masked: true
+      loop: "{{ sleep_targets }}"
+
+    # The text console never blanks by default, so with the lid ignored the
+    # backlight would stay lit, and hot, under a closed lid. Takes effect on
+    # the next boot.
+    - name: Read the default kernel arguments
+      ansible.builtin.command:
+        cmd: grubby --info=DEFAULT
+      register: grubby_default
+      changed_when: false
+
+    - name: Blank the console after 60 seconds idle
+      ansible.builtin.command:
+        cmd: grubby --update-kernel=ALL --args=consoleblank=60
+      when: "'consoleblank=60' not in grubby_default.stdout"
+      changed_when: true
+
+    # The kernel argument only applies at boot; this sets the same interval on
+    # the running console so no reboot is needed.
+    - name: Read the running console blank interval
+      ansible.builtin.slurp:
+        src: /sys/module/kernel/parameters/consoleblank
+      register: consoleblank_running
+
+    # shell is needed to point setterm's escape sequences at tty1.
+    - name: Blank the running console after 60 seconds idle
+      ansible.builtin.shell:
+        cmd: TERM=linux setterm --blank 1 --powerdown 1 > /dev/tty1 < /dev/tty1
+      when: (consoleblank_running.content | b64decode | trim | int) != 60
+      changed_when: true
+
+    # Wi-Fi power saving adds latency spikes that show up as Cilium health
+    # check and kubelet lease failures. 2 = disable. Applies on the next
+    # connection, so a reload here does not drop the Ansible session.
+    - name: Disable Wi-Fi power saving in NetworkManager
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/conf.d/10-k8s-node-wifi-powersave.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [connection]
+          wifi.powersave = 2
+      notify: Reload NetworkManager
+
+  handlers:
+    - name: Restart systemd-logind
+      ansible.builtin.systemd_service:
+        name: systemd-logind
+        state: restarted
+
+    - name: Reload NetworkManager
+      ansible.builtin.systemd_service:
+        name: NetworkManager
+        state: reloaded

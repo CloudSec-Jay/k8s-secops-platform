@@ -3,7 +3,7 @@
 #   Install once:   pre-commit install
 #   Run manually:   pre-commit run --all-files
 # Hook revisions are pinned to commit SHAs; the comment records the tag.
-exclude: ^(kubernetes-the-hard-way|\.cache)/
+exclude: ^(kubernetes-the-hard-way|\.cache|\.agents)/
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -21,17 +21,31 @@ repos:
       - id: yamllint
         # cloud-init templates need a "#cloud-config" first line, which the
         # comments rule rejects.
-        exclude: ^terraform/
+        exclude: ^archive/terraform/
 
   - repo: https://github.com/ansible/ansible-lint
     rev: e7f397ad6dfa20d274afa17cd7bbedd84ed136f5  # frozen: v26.9.0
     hooks:
       - id: ansible-lint
         files: ^scripts/Ansible/
-        args: [scripts/Ansible/]
+
+  # PSScriptAnalyzer in Microsoft's PowerShell image, pinned by digest, so
+  # neither WSL nor CI needs pwsh installed; the wrapper pins the analyzer.
+  - repo: local
+    hooks:
+      - id: psscriptanalyzer
+        name: PSScriptAnalyzer
+        language: docker_image
+        entry: >-
+          -e HOME=/tmp --entrypoint pwsh
+          mcr.microsoft.com/powershell@sha256:042240d57ec9e47e511033b92625a8d95875ee5860af3015992c248b58a8be81
+          -NoProfile -NonInteractive -File scripts/dev/Invoke-PSScriptAnalyzer.ps1
+        files: \.(ps1|psm1|psd1)$
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: 80c8033123f6d6b9ccd1a9458562ea4180742af7  # frozen: v1.109.2
     hooks:
       - id: terraform_fmt
+        exclude: ^archive/
       - id: terraform_validate
+        exclude: ^archive/

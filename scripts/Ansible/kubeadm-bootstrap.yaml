@@ -3,6 +3,34 @@
   hosts: control_plane
   become: true
   tasks:
+    - name: Create the kubeadm patches directory
+      ansible.builtin.file:
+        path: /etc/kubernetes/patches
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    # With enable_selinux in containerd, static pods run as container_t,
+    # which container-selinux denies reading kubernetes_file_t (the PKI and
+    # kubeconfigs). Workload pods stay container_t.
+    - name: Run the control-plane static pods as spc_t
+      ansible.builtin.copy:
+        dest: "/etc/kubernetes/patches/{{ item }}.yaml"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          spec:
+            securityContext:
+              seLinuxOptions:
+                type: spc_t
+      loop:
+        - etcd
+        - kube-apiserver
+        - kube-controller-manager
+        - kube-scheduler
+
     - name: Kubernetes init template
       ansible.builtin.template:
         src: kubeadm-config.yaml.j2
@@ -16,10 +44,32 @@
         cmd: kubeadm config validate --config /etc/kubernetes/kubeadm-config.yaml
       changed_when: false
 
+    # kubeadm writes admin.conf early in init, so its presence does not prove
+    # init finished. Only a serving API server does.
+    - name: Check whether the API server is already serving
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw=/readyz
+      register: apiserver_readyz
+      changed_when: false
+      failed_when: false
+
+    - name: Check for leftovers from a failed init
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_conf
+
+    - name: Stop on a half-finished init
+      ansible.builtin.fail:
+        msg: >-
+          admin.conf exists but the API server is not serving. Fix the cause,
+          run `sudo kubeadm reset -f` on {{ inventory_hostname }}, then re-run.
+      when: apiserver_readyz.rc != 0 and admin_conf.stat.exists
+
     - name: Initialize the Kubernetes control-plane
       ansible.builtin.command:
         cmd: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
-        creates: /etc/kubernetes/admin.conf
+      when: apiserver_readyz.rc != 0
+      changed_when: true
 
     - name: Create the kubectl configuration directory
       ansible.builtin.file:

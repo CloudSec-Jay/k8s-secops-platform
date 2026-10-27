@@ -1,0 +1,16 @@
+---
+# Helm overrides for the argo-cd chart. The chart version is pinned in
+# versions.env and group_vars/k8s_cluster.yml, not here.
+#
+# TODO: fill in from the chart's values.yaml
+# (https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/values.yaml):
+#
+#   1. Lab sizing: one replica of each component. Which keys control the
+#      controller, server, repoServer and redis replica counts?
+#   2. No external exposure yet: keep argocd-server a ClusterIP Service.
+#      You will reach the UI with `kubectl port-forward` until it gets an
+#      HTTPRoute on lab-gateway.
+#   3. Turn off components you do not need yet (dex for SSO, notifications).
+#      Fewer pods means fewer flows to allow in the Cilium policy.
+#   4. Security context: confirm the chart's pods run as non-root with a
+#      read-only root filesystem, and note which defaults you kept.

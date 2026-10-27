@@ -1,0 +1,38 @@
+---
+# LoadBalancer IPs for opted-in Services on the home LAN (10.0.0.0/24). The
+# router never assigns 10.0.0.56, so it is the only address in the pool; the
+# Gateway pins it. Add addresses here only after confirming the router will
+# never lease them, or two devices will answer ARP for the same IP.
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: lan-services
+spec:
+  blocks:
+    - start: "10.0.0.56"
+      stop: "10.0.0.56"
+  serviceSelector:
+    matchLabels:
+      lab.internal/expose: lan
+---
+# Worker nodes answer ARP for LoadBalancer IPs of opted-in Services only.
+# Must select the same label as the pool above.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: lan-services
+spec:
+  serviceSelector:
+    matchLabels:
+      lab.internal/expose: lan
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+  # The laptop workers announce on Wi-Fi: wlp58s0 (worker-1) and wlp0s20f3
+  # (worker-2). Add the USB Ethernet name here if the nodes move to wired.
+  # Confirm with `ip -br link` on a worker.
+  interfaces:
+    - ^wlp
+  externalIPs: false
+  loadBalancerIPs: true

@@ -1,0 +1,68 @@
+---
+# Apply CIS RHEL 10 Benchmark v1.0.1 (Ansible Lockdown RHEL10-CIS role, pinned
+# in requirements.yml) to the Kubernetes nodes, one node at a time.
+#
+# Deviations that Kubernetes or this hardware need are in
+# vars/cis-exceptions.yml and group_vars/baremetal.yml, and explained in
+# docs/cis-deviations.md. Runs as the last step of site.yaml, after Cilium,
+# because it checks each node is Ready before and after hardening it.
+#
+# CIS 1.2.2.1 upgrades every package, and the role reports reboot_required.
+# Run `dnf -y update` and reboot first so a mid-play sshd restart cannot drop
+# the session, and reboot each node after its run.
+#
+# To harden a single node, one per run with its console within reach:
+#   ansible-playbook cis-hardening.yaml -K --limit worker-1
+#   ansible-playbook cis-hardening.yaml -K --limit control-plane-1
+#   ansible-playbook cis-hardening.yaml -K --limit worker-2
+#
+# Take a Hyper-V checkpoint of control-plane-1 before its run and delete it
+# afterwards; restoring an old checkpoint later would roll etcd back.
+
+- name: Harden the Kubernetes nodes to CIS Level 1 and 2 with deviations
+  hosts: k8s_cluster
+  become: true
+  gather_facts: true
+  serial: 1
+  max_fail_percentage: 0
+
+  vars_files:
+    - vars/cis-exceptions.yml
+
+  pre_tasks:
+    - name: Require the node to be Ready before hardening it
+      ansible.builtin.command:
+        cmd: kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=60s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      delegate_to: "{{ groups['control_plane'][0] }}"
+      changed_when: false
+
+  roles:
+    - role: rhel10_cis
+
+  post_tasks:
+    # The role writes sysctl and modprobe files that apply at boot; these
+    # check the settings Kubernetes depends on survive in the running kernel.
+    - name: Read the settings Kubernetes depends on
+      ansible.builtin.command:
+        cmd: sysctl -n net.ipv4.ip_forward net.bridge.bridge-nf-call-iptables
+      register: cis_k8s_sysctls
+      changed_when: false
+
+    - name: Require IPv4 forwarding and bridge netfilter to stay enabled
+      ansible.builtin.assert:
+        that:
+          - cis_k8s_sysctls.stdout_lines == ['1', '1']
+        fail_msg: >-
+          {{ inventory_hostname }} lost a Kubernetes sysctl after hardening:
+          {{ cis_k8s_sysctls.stdout_lines }}. Check vars/cis-exceptions.yml.
+        quiet: true
+
+    - name: Confirm the node is still Ready
+      ansible.builtin.command:
+        cmd: kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      delegate_to: "{{ groups['control_plane'][0] }}"
+      changed_when: false

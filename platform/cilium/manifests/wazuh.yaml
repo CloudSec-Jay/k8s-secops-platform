@@ -1,0 +1,216 @@
+---
+# The dns rule sends lookups through Cilium's DNS proxy, which toFQDNs in
+# wazuh-manager.yaml depends on. Only in-namespace Service and headless pod
+# names resolve; the managers add cti.wazuh.com in wazuh-manager.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-cluster-dns
+  namespace: wazuh
+spec:
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*.wazuh.svc.cluster.local"
+              - matchPattern: "*.wazuh-cluster.wazuh.svc.cluster.local"
+              # The worker reaches the master as wazuh-manager-master-0.wazuh-cluster.wazuh.
+              # "*" never crosses a dot, so that name and the expansions the pod's
+              # search path tries first need their own patterns. The lookup only
+              # happens on reconnect, so it was missed when rules came from observed flows.
+              - matchPattern: "*.wazuh-cluster.wazuh"
+              - matchPattern: "*.wazuh-cluster.wazuh.wazuh.svc.cluster.local"
+              - matchPattern: "*.wazuh-cluster.wazuh.cluster.local"
+---
+# Single-node indexer: accepts REST from the dashboard and managers and
+# opens no outbound connections.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wazuh-indexer
+  namespace: wazuh
+spec:
+  endpointSelector:
+    matchLabels:
+      app: wazuh-indexer
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: wazuh-dashboard
+        - matchLabels:
+            app: wazuh-manager
+      toPorts:
+        - ports:
+            - port: "9200"
+              protocol: TCP
+---
+# Agent ports are open to the home LAN only: 1515 enrollment on the master,
+# 1514 events on the worker. The API (55000) stays dashboard-only.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wazuh-manager-master
+  namespace: wazuh
+spec:
+  endpointSelector:
+    matchLabels:
+      app: wazuh-manager
+      node-type: master
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: wazuh-dashboard
+      toPorts:
+        - ports:
+            - port: "55000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: wazuh-manager
+            node-type: worker
+      toPorts:
+        - ports:
+            - port: "1516"
+              protocol: TCP
+    - fromCIDR:
+        - 10.0.0.0/24
+      toPorts:
+        - ports:
+            - port: "1515"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-indexer
+      toPorts:
+        - ports:
+            - port: "9200"
+              protocol: TCP
+    # Vulnerability detection feed: the lookup, then the connection.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: cti.wazuh.com
+    - toFQDNs:
+        - matchName: cti.wazuh.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wazuh-manager-worker
+  namespace: wazuh
+spec:
+  endpointSelector:
+    matchLabels:
+      app: wazuh-manager
+      node-type: worker
+  ingress:
+    - fromCIDR:
+        - 10.0.0.0/24
+      toPorts:
+        - ports:
+            - port: "1514"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-indexer
+      toPorts:
+        - ports:
+            - port: "9200"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-manager
+            node-type: master
+      toPorts:
+        - ports:
+            - port: "1516"
+              protocol: TCP
+    # Vulnerability detection feed: the lookup, then the connection.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchName: cti.wazuh.com
+    - toFQDNs:
+        - matchName: cti.wazuh.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# The UI is open to the home LAN only; the Service's 443 maps to pod port
+# 5601. kubectl port-forward enters through the pod's network namespace and
+# is not subject to this policy.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wazuh-dashboard
+  namespace: wazuh
+spec:
+  endpointSelector:
+    matchLabels:
+      app: wazuh-dashboard
+  ingress:
+    # Direct LAN access (legacy / backup)
+    - fromCIDR:
+        - 10.0.0.0/24
+      toPorts:
+        - ports:
+            - port: "5601"
+              protocol: TCP
+    # Cilium Gateway API (Envoy L7 proxy)
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "5601"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-indexer
+      toPorts:
+        - ports:
+            - port: "9200"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: wazuh-manager
+            node-type: master
+      toPorts:
+        - ports:
+            - port: "55000"
+              protocol: TCP

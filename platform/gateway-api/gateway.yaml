@@ -1,0 +1,52 @@
+---
+# Wildcard TLS Certificate for *.lab.internal issued by private Root CA
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lab-wildcard-tls
+  namespace: default
+spec:
+  secretName: lab-wildcard-tls
+  issuerRef:
+    name: lab-ca-issuer
+    kind: ClusterIssuer
+  commonName: "*.lab.internal"
+  dnsNames:
+    - "*.lab.internal"
+    - "lab.internal"
+---
+# Shared Cilium Gateway for L7 HTTPS ingress routing
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: lab-gateway
+  namespace: default
+  labels:
+    lab.internal/expose: lan
+spec:
+  gatewayClassName: cilium
+  # Fixed LAN address from the lan-services pool (platform/cilium/manifests/
+  # lb.yaml). A worker answers ARP for it; point *.lab.internal here.
+  addresses:
+    - type: IPAddress
+      value: 10.0.0.56
+  infrastructure:
+    labels:
+      lab.internal/expose: lan
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: lab-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All

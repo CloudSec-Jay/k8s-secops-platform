@@ -1,0 +1,32 @@
+# Inventory for the hybrid lab: a Hyper-V control-plane VM and two bare-metal
+# laptop workers on the home LAN. Copy this file to k8s.ini and replace the
+# example addresses with each node's DHCP reservation.
+#
+#   cp k8s.ini.example k8s.ini
+#   ansible-playbook site.yaml -K
+#
+# Inventory names become the node hostnames (cluster-setup.yaml), so keep
+# them unique.
+
+[control_plane]
+control-plane-1 ansible_host=192.0.2.10
+
+[workers]
+worker-1 ansible_host=192.0.2.21
+worker-2 ansible_host=192.0.2.22
+
+[k8s_cluster:children]
+control_plane
+workers
+
+# Physical laptops: lid, sleep, and Wi-Fi power handling in baremetal-prep.yaml.
+[baremetal]
+worker-1
+worker-2
+
+[k8s_cluster:vars]
+ansible_user=kubeadmin
+ansible_ssh_private_key_file=~/.ssh/k8s_secops_lab
+# Keepalives turn a dropped session (Wi-Fi blip, sshd restart during a
+# package update) into a failure after ~2 minutes instead of a silent hang.
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=4'

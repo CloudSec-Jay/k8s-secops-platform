@@ -3,16 +3,23 @@
 # Ansible. Keep versions aligned with the reviewed pins in ../../../versions.env.
 kubernetes_minor: "v1.37"
 kubernetes_version: "v1.37.1"
-containerd_package_version: "2.2.2-0ubuntu1.1"
+containerd_package_version: "2.4.2-3.el10"
 helm_version: "v4.3.1"
 helm_linux_amd64_sha256: "0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b"
+# Full path: sudo's secure_path on Rocky omits /usr/local/bin, so become
+# tasks cannot find helm by name.
+helm_binary: /usr/local/bin/helm
 cilium_version: "1.20.2"
 local_path_provisioner_version: "v0.0.37"
 metrics_server_chart_version: "3.14.0"
+longhorn_chart_version: "1.12.1"
+cert_manager_chart_version: "v1.21.2"
+gateway_api_version: "v1.6.1"
+argo_cd_chart_version: "10.11.1"
 
-# Must not overlap the node network (192.168.100.0/24) or the home LAN.
+# Must not overlap the node network, which is the home LAN (10.0.0.0/24).
 pod_subnet: "10.244.0.0/16"
 service_subnet: "10.96.0.0/12"
 
-# Fixed control-plane address from terraform/locals.tf.
-control_plane_endpoint: "192.168.100.10:6443"
+# Taken from the inventory so the LAN address lives only in k8s.ini.
+control_plane_endpoint: "{{ hostvars[groups['control_plane'][0]]['ansible_host'] }}:6443"

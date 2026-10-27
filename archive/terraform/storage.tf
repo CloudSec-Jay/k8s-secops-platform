@@ -1,0 +1,74 @@
+# When upgrading the image, update this name together with source_image_path
+# and its pinned SHA-256 in variables.tf.
+resource "libvirt_volume" "base_image" {
+  name = "rocky-10.2-20260525.0-amd64-base.qcow2"
+  pool = var.storage_pool
+
+  target = {
+    format = {
+      type = "qcow2"
+    }
+
+    permissions = {
+      mode = "0644"
+    }
+  }
+
+  create = {
+    content = {
+      url = pathexpand(var.source_image_path)
+    }
+  }
+}
+
+resource "libvirt_volume" "os_disk" {
+  for_each = local.nodes
+
+  name = "${each.key}.qcow2"
+  pool = var.storage_pool
+
+  capacity      = 90
+  capacity_unit = "GiB"
+  allocation    = 0
+
+  backing_store = {
+    path = libvirt_volume.base_image.path
+
+    format = {
+      type = "qcow2"
+    }
+  }
+
+  target = {
+    format = {
+      type = "qcow2"
+    }
+  }
+
+  # An overlay only stores changes on top of its base, so it must be
+  # rebuilt whenever the base image is replaced.
+  lifecycle {
+    replace_triggered_by = [
+      libvirt_volume.base_image
+    ]
+  }
+}
+
+resource "libvirt_volume" "longhorn_disk" {
+  for_each = {
+    for name, node in local.nodes : name => node
+    if node.role == "worker"
+  }
+
+  name          = "${each.key}-longhorn.qcow2"
+  pool          = var.storage_pool
+  capacity      = var.longhorn_disk_size_gib
+  capacity_unit = "GiB"
+  allocation    = 0
+
+  target = {
+    format = {
+      type = "qcow2"
+    }
+  }
+}

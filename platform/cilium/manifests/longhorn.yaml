@@ -1,0 +1,59 @@
+---
+# Longhorn components talk among themselves and to every node (CSI, iSCSI,
+# instance managers). Its upgrade checker's calls to the internet are
+# denied.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-system
+  namespace: longhorn-system
+spec:
+  endpointSelector: {}
+  ingress:
+    # Allow Cilium Gateway API (Envoy proxy) to reach the Longhorn UI. Policy
+    # sees the pod port (8000), not the longhorn-frontend Service port (80).
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    # Allow internal mesh communication between Longhorn system components
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: longhorn-system
+    # Allow kube-system (metrics-server, kube-apiserver webhooks, probes)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+    # Allow host and node-level communication for iSCSI and CSI daemon attachments
+    - fromEntities:
+        - host
+        - remote-node
+  egress:
+    # Allow API server communication for CRDs, lease locks, and controller sync
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+    # Allow cluster CoreDNS lookups
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    # Allow internal mesh communication between Longhorn system components
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: longhorn-system
+    # Allow host and node-level communication for iSCSI target engine operations
+    - toEntities:
+        - host
+        - remote-node

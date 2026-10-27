@@ -1,0 +1,19 @@
+---
+# Application(s): cert-manager from its upstream Helm chart, plus the private
+# Root CA in platform/cert-manager/root-ca.yaml.
+#
+# TODO: write the Application(s)
+# (https://argo-cd.readthedocs.io/en/stable/user-guide/multiple_sources/,
+#  https://argo-cd.readthedocs.io/en/stable/user-guide/directory/):
+#
+#   chart             The upstream chart at CERT_MANAGER_VERSION from
+#                     versions.env, with $values/platform/cert-manager/values.yaml
+#   Root CA           root-ca.yaml holds ClusterIssuer/Certificate objects
+#                     that need cert-manager's CRDs to exist first. Options:
+#                     a second Application, or one Application with sync waves.
+#                     Which do you prefer, and why?
+#   directory filter  platform/cert-manager/ also contains values.yaml and
+#                     README.md. How do you stop Argo CD from trying to apply
+#                     values.yaml as a manifest? (directory.include)
+#   destination       namespace cert-manager
+#   syncPolicy        Manual for now. Does the namespace need CreateNamespace?

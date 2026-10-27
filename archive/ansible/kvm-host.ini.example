@@ -1,0 +1,8 @@
+# KVM/libvirt host that runs the lab VMs. Copy this file to kvm-host.ini and
+# replace the example values with the SSH endpoint for the current host.
+#
+#   cp kvm-host.ini.example kvm-host.ini
+#   ansible-playbook -i kvm-host.ini kvm-host-lan.yaml -K
+
+[kvm_host]
+kvm-host ansible_host=192.0.2.10 ansible_user=your-remote-account

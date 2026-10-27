@@ -1,0 +1,50 @@
+#!/bin/bash
+# Rendered by kvm-host-lan.yaml. libvirt runs this as
+#   network <network> <operation> <sub-operation> <extra>
+# and passes the network XML on stdin, which is not used here.
+#
+# Forwards the host's own ports on {{ lan_interface }} to Cilium LoadBalancer
+# IPs inside the {{ libvirt_network }} network. DNAT rewrites only the
+# destination, so backends still see the LAN client's source address.
+# FORWARD then allows only those DNATed connections: libvirt's NAT rules would
+# otherwise reject new connections into the bridge, and a LAN client cannot
+# reach a VIP directly without going through the DNAT.
+set -eu
+
+[ "${1:-}" = "{{ libvirt_network }}" ] || exit 0
+
+# Each entry is a fixed argument list for an iptables rule.
+nat_rules=(
+{% for port, vip in lan_forwards.items() %}
+  "-i {{ lan_interface }} -p tcp --dport {{ port }} -m addrtype --dst-type LOCAL -m comment --comment {{ libvirt_network }}-lan -j DNAT --to-destination {{ vip }}:{{ port }}"
+{% endfor %}
+)
+filter_rules=(
+{% for port, vip in lan_forwards.items() %}
+  "-i {{ lan_interface }} -o {{ lab_bridge }} -s {{ lan_cidr }} -d {{ vip }} -p tcp --dport {{ port }} -m conntrack --ctstate DNAT -m comment --comment {{ libvirt_network }}-lan -j ACCEPT"
+  "-i {{ lab_bridge }} -o {{ lan_interface }} -s {{ vip }} -p tcp --sport {{ port }} -d {{ lan_cidr }} -m conntrack --ctstate ESTABLISHED,RELATED -m comment --comment {{ libvirt_network }}-lan -j ACCEPT"
+{% endfor %}
+)
+
+case "${2:-}" in
+  started)
+    for rule in "${nat_rules[@]}"; do
+      # shellcheck disable=SC2086 # split the fixed argument list
+      iptables -t nat -C PREROUTING $rule 2>/dev/null || iptables -t nat -I PREROUTING 1 $rule
+    done
+    for rule in "${filter_rules[@]}"; do
+      # shellcheck disable=SC2086 # split the fixed argument list
+      iptables -C FORWARD $rule 2>/dev/null || iptables -I FORWARD 1 $rule
+    done
+    ;;
+  stopped)
+    for rule in "${nat_rules[@]}"; do
+      # shellcheck disable=SC2086 # split the fixed argument list
+      iptables -t nat -D PREROUTING $rule 2>/dev/null || true
+    done
+    for rule in "${filter_rules[@]}"; do
+      # shellcheck disable=SC2086 # split the fixed argument list
+      iptables -D FORWARD $rule 2>/dev/null || true
+    done
+    ;;
+esac

@@ -1,0 +1,132 @@
+---
+# Forward KVM host ports on the home LAN to the lab's Cilium LoadBalancer IPs.
+#
+# Cilium answers ARP for the VIPs on the lab bridge (L2 announcements), so a
+# VIP follows its lease to a healthy worker. The Wi-Fi LAN cannot be bridged
+# to the VMs, so the host DNATs its own ports to fixed VIPs and allows
+# forwarding of those connections only. The rules live in a libvirt network
+# hook so they are reapplied whenever the network starts.
+#
+# Prerequisites:
+#   1. platform/cilium/manifests/lb.yaml applied
+#   2. Each VIP in lan_forwards pinned on its Service or Gateway
+#   3. libvirt uses its iptables firewall backend (checked below)
+#
+# Usage (sudo on the host needs a password):
+#   ansible-playbook -i kvm-host.ini kvm-host-lan.yaml -K
+
+- name: Forward host LAN ports to lab LoadBalancer IPs
+  hosts: kvm_host
+  become: true
+  gather_facts: false
+
+  vars:
+    libvirt_network: k8s-lab
+    lab_bridge: virbr-k8s
+    lan_interface: wlp0s20f3
+    lan_cidr: 10.0.0.0/24
+    # Host port -> VIP in the pool in platform/cilium/manifests/lb.yaml.
+    # Each target port equals the host port.
+    lan_forwards:
+      443: 192.168.100.200 # lab-gateway (platform/gateway-api/gateway.yaml)
+      1515: 192.168.100.201 # Wazuh manager master: agent enrollment
+      1514: 192.168.100.202 # Wazuh manager workers: agent events
+    network_hook: /etc/libvirt/hooks/network
+
+  tasks:
+    - name: Read the FORWARD chain
+      ansible.builtin.command:
+        cmd: iptables -S FORWARD
+      register: forward_chain
+      changed_when: false
+
+    - name: Require libvirt's iptables backend so the hook's rules can precede it
+      ansible.builtin.assert:
+        that: "'-j LIBVIRT_FWI' in forward_chain.stdout"
+        fail_msg: >-
+          libvirt rules are not in the iptables FORWARD chain. With the
+          nftables backend an ACCEPT in another table cannot override
+          libvirt's REJECT, so this approach does not apply.
+
+    - name: Create the libvirt hooks directory
+      ansible.builtin.file:
+        path: /etc/libvirt/hooks
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Check whether the network hook already exists
+      ansible.builtin.stat:
+        path: "{{ network_hook }}"
+      register: network_hook_before
+
+    - name: Check whether the network hook would change
+      ansible.builtin.template:
+        src: templates/libvirt-network-hook.sh.j2
+        dest: "{{ network_hook }}"
+        owner: root
+        group: root
+        mode: "0755"
+      check_mode: true
+      register: network_hook_pending
+
+    # The old hook knows how to remove the rules it added; the new one
+    # only knows its own.
+    - name: Remove the rules of the hook being replaced
+      ansible.builtin.command:
+        cmd: "{{ network_hook }} {{ libvirt_network }} stopped end -"
+        stdin: ""
+      when:
+        - network_hook_before.stat.exists
+        - network_hook_pending is changed
+      changed_when: true
+
+    - name: Install the libvirt network hook
+      ansible.builtin.template:
+        src: templates/libvirt-network-hook.sh.j2
+        dest: "{{ network_hook }}"
+        owner: root
+        group: root
+        mode: "0755"
+      notify:
+        - Restart libvirtd to register the hook
+        - Apply the hook to the running network
+
+    # DNAT to the host's own address survives Wi-Fi reconnects, unlike the
+    # proxy ARP entries this script used to re-add.
+    - name: Remove the retired NetworkManager dispatcher script
+      ansible.builtin.file:
+        path: /etc/NetworkManager/dispatcher.d/90-k8s-lab-lan
+        state: absent
+
+  handlers:
+    # libvirt only discovers a newly created hook script at daemon start.
+    # Running VMs are not affected by a daemon restart.
+    - name: Restart libvirtd to register the hook
+      ansible.builtin.systemd:
+        name: libvirtd
+        state: restarted
+      when: not network_hook_before.stat.exists
+
+    - name: Apply the hook to the running network
+      ansible.builtin.command:
+        cmd: "{{ network_hook }} {{ libvirt_network }} started begin -"
+        stdin: ""
+      # Runs only when the hook template changed, so it always applies new state.
+      changed_when: true
+
+  post_tasks:
+    - name: Show the DNAT and forward rules
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          iptables -t nat -S PREROUTING | grep -F '{{ libvirt_network }}-lan'
+          iptables -S FORWARD | grep -F -e '{{ libvirt_network }}-lan' -e LIBVIRT_FW
+        executable: /bin/bash
+      register: published
+      changed_when: false
+
+    - name: Report the published state
+      ansible.builtin.debug:
+        var: published.stdout_lines

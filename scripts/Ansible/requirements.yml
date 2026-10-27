@@ -1,6 +1,6 @@
 ---
-# Collections used by the playbooks. Install with:
-#   ansible-galaxy collection install -r scripts/Ansible/requirements.yml
+# Collections and roles used by the playbooks. Install with:
+#   ansible-galaxy install -r scripts/Ansible/requirements.yml
 collections:
   - name: community.general
     version: "13.4.0"
@@ -8,3 +8,15 @@ collections:
     version: "2.2.2"
   - name: kubernetes.core
     version: "6.6.0"
+  # Required by the RHEL10-CIS role.
+  - name: community.crypto
+    version: "3.5.0"
+
+roles:
+  # CIS RHEL 10 Benchmark v1.0.1 remediation. Installed into roles/ (ignored by
+  # Git). Release 1.1.2 = commit 71d291ea07be450aee602e858b7288452fb27b56.
+  # https://github.com/ansible-lockdown/RHEL10-CIS/releases/tag/1.1.2
+  - name: rhel10_cis
+    src: https://github.com/ansible-lockdown/RHEL10-CIS.git
+    scm: git
+    version: "1.1.2"

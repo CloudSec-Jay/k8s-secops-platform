@@ -1,0 +1,94 @@
+---
+# Pin each node's current DHCP address as a static NetworkManager address.
+# Safe to re-run: settings are compared first and changed only if they differ.
+#
+# A node IP must never change: it is in the kubelet serving certificate, the
+# API server certificate (control plane), etcd, and the inventory. The router
+# can still lease these addresses to another device, so keep them out of its
+# DHCP range or reserve them there as well.
+#
+# DNS points at the router (the default gateway) instead of the ISP resolvers
+# DHCP handed out. platform/cilium/manifests/kube-system.yaml allows CoreDNS
+# to reach exactly that address.
+#
+# nmcli commands are used instead of community.general.nmcli: for Wi-Fi
+# profiles that module also manages the SSID and security settings, and only
+# the IP settings may change here. `device reapply` applies them without
+# dropping the Wi-Fi association or the Ansible SSH session.
+
+- name: Pin static node addresses
+  hosts: k8s_cluster
+  become: true
+  gather_facts: true
+
+  vars:
+    node_interface: "{{ ansible_facts['default_ipv4']['interface'] }}"
+    node_gateway: "{{ ansible_facts['default_ipv4']['gateway'] }}"
+    node_address: "{{ ansible_host }}/{{ ansible_facts['default_ipv4']['prefix'] }}"
+    # Order matches the nmcli -g fields read below.
+    node_ip_settings:
+      - manual
+      - "{{ node_address }}"
+      - "{{ node_gateway }}"
+      - "{{ node_gateway }}"
+      - "yes"
+      - "yes"
+
+  tasks:
+    # Pinning a different address than the node has would cut the session.
+    - name: Require the node's current address to match the inventory
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['default_ipv4']['address'] == ansible_host
+        fail_msg: >-
+          {{ inventory_hostname }} has {{ ansible_facts['default_ipv4']['address'] }}
+          but the inventory says {{ ansible_host }}. Fix k8s.ini first.
+        quiet: true
+
+    - name: Find the NetworkManager connection on the default-route interface
+      ansible.builtin.command:
+        cmd: nmcli -g GENERAL.CONNECTION device show {{ node_interface }}
+      register: node_connection
+      changed_when: false
+
+    - name: Read the connection's current IP settings
+      ansible.builtin.command:
+        argv:
+          - nmcli
+          - -g
+          - ipv4.method,ipv4.addresses,ipv4.gateway,ipv4.dns,ipv4.ignore-auto-dns,ipv6.ignore-auto-dns
+          - connection
+          - show
+          - "{{ node_connection.stdout }}"
+      register: node_ip_current
+      changed_when: false
+
+    - name: Set the static address, gateway, and router DNS
+      ansible.builtin.command:
+        argv:
+          - nmcli
+          - connection
+          - modify
+          - "{{ node_connection.stdout }}"
+          - ipv4.method
+          - manual
+          - ipv4.addresses
+          - "{{ node_address }}"
+          - ipv4.gateway
+          - "{{ node_gateway }}"
+          - ipv4.dns
+          - "{{ node_gateway }}"
+          - ipv4.ignore-auto-dns
+          - "yes"
+          # Drops the ISP's IPv6 resolvers from /etc/resolv.conf as well.
+          - ipv6.ignore-auto-dns
+          - "yes"
+      when: node_ip_current.stdout_lines != node_ip_settings
+      changed_when: true
+      notify: Reapply the node connection
+
+  handlers:
+    - name: Reapply the node connection
+      ansible.builtin.command:
+        cmd: nmcli device reapply {{ node_interface }}
+      changed_when: true

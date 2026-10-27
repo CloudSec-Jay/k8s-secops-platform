@@ -1,0 +1,76 @@
+---
+# Cluster-wide baseline: every endpoint in every namespace, including ones
+# created later, denies traffic unless another policy allows it. Apply last,
+# after the other bundles in this folder.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  endpointSelector: {}
+  ingress:
+    - {}
+  egress:
+    - {}
+---
+# cilium-health endpoints probe each other between nodes; without this the
+# default deny above breaks Cilium's own connectivity health checks.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cilium-health
+spec:
+  endpointSelector:
+    matchLabels:
+      reserved:health: ""
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - health
+  egress:
+    - toEntities:
+        - host
+        - remote-node
+        - health
+---
+# Cilium Gateway API traffic passes through Envoy as the reserved:ingress
+# identity, and cluster-default-deny.yaml selects that identity too. Without
+# this policy Envoy answers every request with "403 Access denied".
+#
+# Two hops, both enforced:
+#   LAN client -> Gateway listener   (ingress rule below)
+#   Gateway    -> backend pod port   (egress rule below; the backend's own
+#                                     policy must also allow fromEntities: ingress)
+# Ports are pod ports after the Service lookup: longhorn-ui serves on 8000,
+# not the Service's 80.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: gateway-ingress
+spec:
+  endpointSelector:
+    matchLabels:
+      reserved:ingress: ""
+  # Only the admin desktop (Windows + WSL share 10.0.0.79) may reach the
+  # Gateway: the Longhorn UI behind it has no login. Widen to 10.0.0.0/24 only
+  # once every route has authentication. 10.0.0.79 is a DHCP address; if the
+  # desktop's address changes, update it here.
+  ingress:
+    - fromCIDR:
+        - 10.0.0.79/32
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: longhorn-system
+            app: longhorn-ui
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
