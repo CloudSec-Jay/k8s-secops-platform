@@ -1,0 +1,71 @@
+---
+# Deviations from the CIS RHEL 10 Benchmark v1.0.1 for the Kubernetes nodes,
+# applied over the RHEL10-CIS role defaults by cis-hardening.yaml. Each entry
+# names the control, why it is waived, and the compensating control if any.
+# Keep this file and docs/cis-deviations.md in step.
+#
+# Laptop-only exceptions (wireless) live in group_vars/baremetal.yml.
+
+## Site settings the role requires (not deviations)
+
+# 5.3.x authselect: the role builds a custom profile, refuses to run with its
+# example name, and copies the sssd profile by default. The nodes use local
+# accounts only and boot on the "local" profile, so copy that one. The role
+# adds pam_pwquality to the copy, since "local" has no with-pwquality feature.
+# Undo with `authselect backup-restore rhel10cis-preremediate-<timestamp>`.
+rhel10cis_authselect_custom_profile_name: k8s_secops_cis
+rhel10cis_authselect_default_profile_to_copy: "local --symlink-meta"
+
+# 2.1.9 NFS services: Longhorn needs the nfs-utils client for ReadWriteMany
+# volumes and backups, but no node serves NFS. With nfs_server false and
+# nfs_mask true the role keeps the package and masks only nfs-server.service;
+# its default (nfs_server true) would leave the server service unmasked.
+rhel10cis_nfs_server: false
+rhel10cis_nfs_mask: true
+
+## Deviations
+
+# 1.1.1.6 overlay kernel module: containerd's default overlayfs snapshotter
+# needs it; disabling it stops every pod from starting.
+rhel10cis_rule_1_1_1_6: false
+
+# 1.1.1.10 usb-storage kernel module: worker-2's USB SSD is the planned backup
+# target. Kept on all nodes so the role's behavior is the same everywhere.
+rhel10cis_rule_1_1_1_10: false
+
+# 1.4.1 bootloader password: needs a real grub2-mkpasswd-pbkdf2 hash from
+# ansible-vault. The role default is a placeholder. Pending, not waived.
+rhel10cis_rule_1_4_1: false
+
+# 3.3.1.1-3 IPv4 forwarding: Kubernetes and Cilium route pod and Service
+# traffic through the node. cluster-setup.yaml sets net.ipv4.ip_forward = 1.
+rhel10cis_rule_3_3_1_1: false
+rhel10cis_rule_3_3_1_2: false
+rhel10cis_rule_3_3_1_3: false
+
+# 3.3.1.12 net.ipv4.conf.all.rp_filter = 1: the Cilium agent sets it to 0 at
+# startup, and the kernel applies the stricter of "all" and the per-interface
+# value. Enforcing 1 fights Cilium on every boot. 3.3.1.13 (default) stays on.
+rhel10cis_rule_3_3_1_12: false
+
+# Section 4 host firewall (firewalld, zone target DROP): blocks the kubelet,
+# etcd, Cilium VXLAN and health checks, and NodePorts; cluster-setup.yaml
+# disables firewalld. Compensating control: Cilium host firewall (SG-12).
+rhel10cis_section4: false
+
+# 6.1.1-6.1.3 AIDE: compensating control is Wazuh agent FIM (syscheck with
+# whodata) on every node, with alerts held off-host on the manager. Until the
+# agents are deployed this is an open gap, tracked in docs/security-gaps.md.
+rhel10cis_config_aide: false
+rhel10cis_rule_6_1_1: false
+rhel10cis_rule_6_1_2: false
+rhel10cis_rule_6_1_3: false
+
+# 6.3.2.x auditd log handling: the root filesystem is shared with Longhorn
+# replicas and container images, so unbounded audit logs would eventually fill
+# it, and halting a node on low disk takes its workloads down. Logs rotate,
+# and low space is logged instead. Audit logs are to be shipped off-host by
+# the Wazuh agent.
+rhel10cis_auditd_max_log_file_action: rotate
+rhel10cis_auditd_space_left_action: syslog
+rhel10cis_auditd_admin_space_left_action: syslog

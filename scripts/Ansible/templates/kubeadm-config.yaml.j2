@@ -8,6 +8,10 @@ localAPIEndpoint:
   bindPort: 6443
 nodeRegistration:
   criSocket: unix:///var/run/containerd/containerd.sock
+# Control-plane static pods read kubernetes_file_t under /etc/kubernetes,
+# which container_t may not; spc_t is scoped to these four pods only.
+patches:
+  directory: /etc/kubernetes/patches
 # Cilium replaces kube-proxy, so kubeadm must not install it.
 skipPhases:
   - addon/kube-proxy

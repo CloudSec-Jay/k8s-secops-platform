@@ -1,5 +1,5 @@
 ---
-# Kubernetes node-preparation playbook.
+# Kubernetes node-preparation playbook for Rocky Linux 10 nodes.
 #
 # This playbook is designed to be safe to syntax-check and run repeatedly.
 # It prepares nodes only; it does not run kubeadm init or join.
@@ -9,7 +9,8 @@
   become: true
   gather_facts: true
 
-  # kubernetes_minor comes from group_vars/k8s_cluster.yml.
+  # kubernetes_minor and containerd_package_version come from
+  # group_vars/k8s_cluster.yml.
   vars:
     kubernetes_packages:
       - kubelet
@@ -26,23 +27,83 @@
       net.ipv4.ip_forward: "1"
 
   tasks:
-    - name: Install the pinned containerd package
-      ansible.builtin.apt:
-        name: "containerd={{ containerd_package_version }}"
+    # kubelet registers the node under its hostname, and later plays wait on
+    # node/<inventory_hostname>, so the two must match. Fresh installs boot as
+    # localhost.localdomain, which would collide across nodes.
+    - name: Set the hostname to the inventory name
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    # There is no lab DNS on the home LAN; kubeadm preflight resolves node names.
+    - name: Map every cluster node name to its LAN address
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '\s{{ item }}$'
+        line: "{{ hostvars[item]['ansible_host'] }} {{ item }}"
         state: present
-        update_cache: true
-        cache_valid_time: 3600
+      loop: "{{ groups['k8s_cluster'] }}"
 
-    # Upgrade containerd deliberately by bumping containerd_package_version,
-    # never as a side effect of apt upgrade.
-    - name: Hold containerd at the pinned version
-      ansible.builtin.dpkg_selections:
-        name: containerd
-        selection: hold
+    # Minimal installs omit tar, which ansible.builtin.unarchive needs.
+    - name: Install base utilities missing from a minimal install
+      ansible.builtin.dnf:
+        name: tar
+        state: present
 
-    - name: Install the Longhorn iSCSI initiator
-      ansible.builtin.apt:
-        name: open-iscsi
+    # Rocky boots enforcing. This keeps it there and records the intent:
+    # pods are confined by container-selinux, not exempted from it.
+    - name: Keep SELinux enforcing with the targeted policy
+      ansible.posix.selinux:
+        state: enforcing
+        policy: targeted
+
+    # Cilium network policy is the lab's traffic control. A host firewall on
+    # the nodes would also need kubelet, etcd, VXLAN and health-check ports
+    # opened, and kubeadm preflight warns while it is active.
+    - name: Read the installed services
+      ansible.builtin.service_facts:
+
+    - name: Stop and disable firewalld on the nodes
+      ansible.builtin.systemd_service:
+        name: firewalld
+        state: stopped
+        enabled: false
+      when: "'firewalld.service' in ansible_facts['services']"
+
+    # Rocky's BaseOS and AppStream do not ship containerd. Docker's RPM
+    # repository supplies containerd.io only; exclude keeps dnf upgrade from
+    # moving it, so it changes only when containerd_package_version is bumped.
+    # https://docs.docker.com/engine/install/rhel/
+    - name: Trust the Docker RPM signing key
+      ansible.builtin.rpm_key:
+        key: https://download.docker.com/linux/rhel/gpg
+        fingerprint: 060A 61C5 1B55 8A7F 742B 77AA C52F EB6B 621E 9F35
+        state: present
+
+    - name: Configure the Docker RPM repository for containerd.io
+      ansible.builtin.yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable (containerd.io only)
+        baseurl: "https://download.docker.com/linux/rhel/{{ ansible_facts['distribution_major_version'] }}/$basearch/stable"
+        gpgcheck: true
+        gpgkey: https://download.docker.com/linux/rhel/gpg
+        exclude: containerd.io
+
+    - name: Install the pinned containerd package and its SELinux policy
+      ansible.builtin.dnf:
+        name:
+          - "containerd.io-{{ containerd_package_version }}"
+          - container-selinux
+        state: present
+        disable_excludes: docker-ce-stable
+
+    # iSCSI attaches Longhorn volumes to pods; the NFS client mounts
+    # ReadWriteMany volumes and backup targets. The NFS server stays masked
+    # by the CIS role (vars/cis-exceptions.yml).
+    - name: Install the Longhorn iSCSI initiator and NFS client
+      ansible.builtin.dnf:
+        name:
+          - iscsi-initiator-utils
+          - nfs-utils
         state: present
 
     - name: Enable and start the iSCSI daemon
@@ -91,10 +152,22 @@
         group: root
         mode: "0755"
 
-    - name: Generate the default containerd configuration once
+    # containerd.io ships a config.toml for Docker Engine with the CRI plugin
+    # disabled. kubelet needs CRI, so that file is replaced with the full
+    # default once; later runs keep local edits.
+    - name: Read the containerd configuration
+      ansible.builtin.slurp:
+        src: /etc/containerd/config.toml
+      register: containerd_config
+      failed_when: false
+
+    - name: Generate the default containerd configuration
       ansible.builtin.shell:
         cmd: containerd config default > /etc/containerd/config.toml
-        creates: /etc/containerd/config.toml
+      when: >-
+        containerd_config.content is not defined or
+        'disabled_plugins = ["cri"]' in (containerd_config.content | b64decode)
+      changed_when: true
       notify: Restart containerd
 
     - name: Use systemd cgroups in containerd
@@ -105,80 +178,55 @@
       when: not ansible_check_mode
       notify: Restart containerd
 
+    # Without this, containerd starts containers without SELinux labels and
+    # enforcing mode does not confine them.
+    - name: Label containers with SELinux in containerd
+      ansible.builtin.replace:
+        path: /etc/containerd/config.toml
+        regexp: '^(\s*)enable_selinux\s*=\s*false$'
+        replace: '\1enable_selinux = true'
+      when: not ansible_check_mode
+      notify: Restart containerd
+
     # CHALLENGE 2 COMPLETE: Configure the pinned Kubernetes package repository.
     #
     # Upstream source pattern:
-    # https://pkgs.k8s.io/core:/stable:/<KUBERNETES_MINOR>/deb/
+    # https://pkgs.k8s.io/core:/stable:/<KUBERNETES_MINOR>/rpm/
     #
     # Goal:
-    # - Ensure /etc/apt/keyrings exists with mode 0755.
-    # - Download the repository signing key from the pinned minor repository.
-    # - Configure one signed-by APT source using kubernetes_minor.
-    # - Refresh the APT cache only when the repository configuration changes.
+    # - Trust the repository signing key, pinned by fingerprint.
+    # - Configure one repository using kubernetes_minor.
+    # - Exclude the Kubernetes packages so dnf upgrade never moves them.
     #
-    - name: Create the APT keyring directory
-      ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Download the Kubernetes repository signing key
-      ansible.builtin.get_url:
-        url: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor }}/deb/Release.key"
-        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
-        owner: root
-        group: root
-        mode: "0644"
-
-    # deb822_repository needs python3-debian on the node.
-    - name: Install the deb822 repository dependency
-      ansible.builtin.apt:
-        name: python3-debian
+    - name: Trust the Kubernetes repository signing key
+      ansible.builtin.rpm_key:
+        key: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor }}/rpm/repodata/repomd.xml.key"
+        fingerprint: DE15 B144 86CD 377B 9E87 6E1A 2346 54DA 9A29 6436
         state: present
-
-    # Replaced by kubernetes.sources below; keeping both makes apt see the
-    # repository twice.
-    - name: Remove the legacy one-line Kubernetes source
-      ansible.builtin.file:
-        path: /etc/apt/sources.list.d/kubernetes.list
-        state: absent
-      register: kubernetes_legacy_source
 
     - name: Configure the pinned Kubernetes package repository
-      ansible.builtin.deb822_repository:
+      ansible.builtin.yum_repository:
         name: kubernetes
-        types: deb
-        uris: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor }}/deb/"
-        suites: /
-        signed_by: /etc/apt/keyrings/kubernetes-apt-keyring.asc
-        state: present
-      register: kubernetes_source
-
-    - name: Refresh the APT cache after a repository change
-      ansible.builtin.apt:
-        update_cache: true
-      when: kubernetes_source is changed or kubernetes_legacy_source is changed
+        description: "Kubernetes {{ kubernetes_minor }}"
+        baseurl: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor }}/rpm/"
+        gpgcheck: true
+        gpgkey: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_minor }}/rpm/repodata/repomd.xml.key"
+        exclude: kubelet kubeadm kubectl cri-tools kubernetes-cni
 
     # CHALLENGE 3 COMPLETE: Install and hold the Kubernetes packages.
     #
     # Goal:
     # - Install every item in kubernetes_packages with state present.
-    # - Prevent unintended upgrades of each Kubernetes package.
+    # - Prevent unintended upgrades: the repository exclude above holds them,
+    #   and installs lift it with disable_excludes, as in the kubeadm guide.
     # - Enable kubelet without claiming it should already be healthy; kubelet
     #   normally restart-loops until kubeadm supplies its configuration.
     #
     - name: Install the Kubernetes packages
-      ansible.builtin.apt:
+      ansible.builtin.dnf:
         name: "{{ kubernetes_packages }}"
         state: present
-
-    - name: Hold the Kubernetes packages at their installed versions
-      ansible.builtin.dpkg_selections:
-        name: "{{ item }}"
-        selection: hold
-      loop: "{{ kubernetes_packages }}"
+        disable_excludes: kubernetes
 
     - name: Enable kubelet for startup
       ansible.builtin.systemd_service:

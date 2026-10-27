@@ -43,7 +43,7 @@
     - name: Install the pinned Helm executable
       ansible.builtin.copy:
         src: "{{ helm_install_directory }}/linux-amd64/helm"
-        dest: /usr/local/bin/helm
+        dest: "{{ helm_binary }}"
         remote_src: true
         owner: root
         group: root
@@ -51,7 +51,7 @@
 
     - name: Verify the installed Helm version
       ansible.builtin.command:
-        cmd: helm version --short
+        cmd: "{{ helm_binary }} version --short"
       register: helm_version_result
       changed_when: false
       failed_when: helm_version not in helm_version_result.stdout

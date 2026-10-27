@@ -1,0 +1,92 @@
+---
+# Deploy cert-manager with Cilium zero-trust network policies and initialize the private Root CA.
+
+- name: Install cert-manager on the control plane
+  hosts: control_plane[0]
+  become: true
+  gather_facts: false
+
+  vars:
+    cert_manager_values_path: /etc/kubernetes/cert-manager-values.yaml
+    cert_manager_policy_path: /etc/kubernetes/cert-manager-policy.yaml
+    cert_manager_ca_path: /etc/kubernetes/cert-manager-root-ca.yaml
+
+  tasks:
+    - name: Stage the cert-manager Cilium network policy
+      ansible.builtin.copy:
+        src: ../../platform/cilium/manifests/cert-manager.yaml
+        dest: "{{ cert_manager_policy_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Stage the reviewed cert-manager values
+      ansible.builtin.copy:
+        src: ../../platform/cert-manager/values.yaml
+        dest: "{{ cert_manager_values_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Stage the private Root CA manifests
+      ansible.builtin.copy:
+        src: ../../platform/cert-manager/root-ca.yaml
+        dest: "{{ cert_manager_ca_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Check if cert-manager namespace exists
+      ansible.builtin.command:
+        cmd: kubectl get namespace cert-manager
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: cert_manager_ns
+      failed_when: false
+      changed_when: false
+
+    - name: Create the cert-manager namespace if missing
+      ansible.builtin.command:
+        cmd: kubectl create namespace cert-manager
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: cert_manager_ns.rc != 0
+      changed_when: true
+
+    - name: Apply the cert-manager Cilium network policy
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ cert_manager_policy_path }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: policy_apply
+      changed_when: "'created' in policy_apply.stdout or 'configured' in policy_apply.stdout"
+
+    - name: Deploy or upgrade cert-manager via Helm
+      kubernetes.core.helm:
+        binary_path: "{{ helm_binary }}"
+        name: cert-manager
+        chart_ref: cert-manager
+        chart_repo_url: https://charts.jetstack.io
+        chart_version: "{{ cert_manager_chart_version }}"
+        release_namespace: cert-manager
+        create_namespace: false
+        kubeconfig: /etc/kubernetes/admin.conf
+        values_files:
+          - "{{ cert_manager_values_path }}"
+        wait: true
+        timeout: "5m"
+
+    - name: Wait for cert-manager-webhook to become available
+      ansible.builtin.command:
+        cmd: "kubectl wait --for=condition=Available deploy/cert-manager-webhook -n cert-manager --timeout=120s"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    - name: Apply the private Root CA and ClusterIssuer
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ cert_manager_ca_path }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: ca_apply
+      changed_when: "'created' in ca_apply.stdout or 'configured' in ca_apply.stdout"

@@ -1,0 +1,7 @@
+---
+# ansible-lint settings, used by the pre-commit hook and CI.
+exclude_paths:
+  # Third-party roles installed from scripts/Ansible/requirements.yml; they
+  # follow their own upstream lint rules and are not committed here.
+  - scripts/Ansible/roles/
+  - archive/

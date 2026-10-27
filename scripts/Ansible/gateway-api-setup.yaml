@@ -1,0 +1,110 @@
+---
+# Configure the shared L7 HTTPS Gateway with wildcard TLS.
+#
+# Prerequisites:
+#   1. cilium-install.yaml executed: it applies the Gateway API CRDs and
+#      enables Cilium's Gateway controller, which creates the GatewayClass
+#   2. cert-manager-install.yaml executed so the ClusterIssuer exists
+#   3. platform/cilium/manifests/lb.yaml applied (LAN address pool), and the
+#      gateway-ingress (cluster.yaml) and longhorn-system (longhorn.yaml)
+#      Cilium policies applied; this play checks for them rather than
+#      applying cluster.yaml, which also holds the cluster-wide default deny
+
+- name: Configure the Cilium Gateway
+  hosts: control_plane[0]
+  become: true
+  gather_facts: false
+
+  vars:
+    gateway_manifest_path: /etc/kubernetes/gateway-api-gateway.yaml
+    routes_manifest_path: /etc/kubernetes/gateway-api-routes.yaml
+
+  tasks:
+    - name: Wait for cilium GatewayClass to become Accepted
+      ansible.builtin.command:
+        cmd: kubectl wait --for=condition=Accepted gatewayclass/cilium --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    - name: Stage the Gateway and TLS Certificate manifest
+      ansible.builtin.copy:
+        src: ../../platform/gateway-api/gateway.yaml
+        dest: "{{ gateway_manifest_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply the Gateway and TLS Certificate
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ gateway_manifest_path }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: gw_apply
+      changed_when: "'created' in gw_apply.stdout or 'configured' in gw_apply.stdout"
+
+    - name: Wait for the wildcard certificate to become Ready
+      ansible.builtin.command:
+        cmd: kubectl wait --for=condition=Ready certificate/lab-wildcard-tls -n default --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    # Without gateway-ingress, the default deny makes Envoy answer 403 to every
+    # request; without longhorn-system, the Longhorn route has no backend.
+    - name: Require the Gateway and Longhorn Cilium policies
+      ansible.builtin.command:
+        cmd: "kubectl get {{ item }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      loop:
+        - ciliumclusterwidenetworkpolicy/gateway-ingress
+        - ciliumloadbalancerippool/lan-services
+        - -n longhorn-system ciliumnetworkpolicy/longhorn-system
+      changed_when: false
+
+    - name: Stage the Gateway API ReferenceGrants
+      ansible.builtin.copy:
+        src: ../../platform/gateway-api/reference-grants.yaml
+        dest: /etc/kubernetes/gateway-api-reference-grants.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply the Gateway API ReferenceGrants
+      ansible.builtin.command:
+        cmd: kubectl apply -f /etc/kubernetes/gateway-api-reference-grants.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: grant_apply
+      changed_when: "'created' in grant_apply.stdout or 'configured' in grant_apply.stdout"
+
+    - name: Stage the HTTPRoutes manifest
+      ansible.builtin.copy:
+        src: ../../platform/gateway-api/routes.yaml
+        dest: "{{ routes_manifest_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply the HTTPRoutes
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ routes_manifest_path }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: route_apply
+      changed_when: "'created' in route_apply.stdout or 'configured' in route_apply.stdout"
+
+    - name: Restart cilium-envoy DaemonSet to connect to fresh xDS sockets
+      ansible.builtin.command:
+        cmd: kubectl -n kube-system rollout restart ds/cilium-envoy
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    - name: Wait for cilium-envoy rollout to complete
+      ansible.builtin.command:
+        cmd: kubectl -n kube-system rollout status ds/cilium-envoy --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false

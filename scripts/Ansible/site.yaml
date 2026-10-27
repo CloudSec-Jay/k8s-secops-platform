@@ -2,22 +2,32 @@
 # Master Kubernetes Platform Orchestrator
 #
 # Executes the full cluster bootstrap sequence in strict dependency order:
-#   1. Prepare nodes (containerd, kernel modules, sysctls, kubelet/kubeadm)
-#   2. Initialize control plane and join worker nodes
-#   3. Install pinned Helm client binary
-#   4. Deploy Cilium CNI with eBPF kube-proxy replacement
-#   5. Configure dynamic persistent storage (local-path default StorageClass)
+#   1. Pin static node addresses and router DNS
+#   2. Prepare nodes (hostname, containerd, kernel modules, sysctls, kubelet/kubeadm)
+#   3. Keep the laptop workers awake (lid, sleep targets, Wi-Fi power saving)
+#   4. Initialize control plane and join worker nodes
+#   5. Install pinned Helm client binary
+#   6. Deploy Cilium CNI with eBPF kube-proxy replacement
+#   7. Harden every node to CIS RHEL 10, one node at a time (waits for each
+#      node to be Ready, so it must run after Cilium)
 #
-# Usage:
-#   ansible-playbook site.yaml
+# storage-setup.yaml (local-path) is archived in archive/; Longhorn is the
+# default StorageClass via longhorn-node-prep.yaml.
+#
+# Usage (-K prompts for the kubeadmin sudo password):
+#   ansible-playbook site.yaml -K
 
+- name: Pin static node addresses
+  ansible.builtin.import_playbook: node-network.yaml
 - name: Prepare nodes
   ansible.builtin.import_playbook: cluster-setup.yaml
+- name: Keep the laptop workers awake
+  ansible.builtin.import_playbook: baremetal-prep.yaml
 - name: Initialize the control plane and join workers
   ansible.builtin.import_playbook: kubeadm-bootstrap.yaml
 - name: Install the pinned Helm client
   ansible.builtin.import_playbook: helm-install.yaml
 - name: Deploy Cilium
   ansible.builtin.import_playbook: cilium-install.yaml
-- name: Configure dynamic persistent storage
-  ansible.builtin.import_playbook: storage-setup.yaml
+- name: Harden the nodes to CIS RHEL 10
+  ansible.builtin.import_playbook: cis-hardening.yaml

@@ -1,0 +1,127 @@
+---
+# Bootstrap Argo CD on the control plane. Argo CD cannot install itself on a
+# new cluster, so this playbook installs it once; the Applications in
+# platform/argocd/apps/ take over from there.
+#
+# Order matters: the Cilium allow policy goes in before the chart, or the
+# cluster default deny blocks the new pods, and the AppProject goes in before
+# the Applications that reference it.
+#
+# Usage:
+#   ansible-playbook argocd-install.yaml
+
+- name: Install Argo CD on the control plane
+  hosts: control_plane[0]
+  become: true
+  gather_facts: false
+
+  vars:
+    argocd_namespace: argocd
+    argocd_stage_dir: /etc/kubernetes/argocd
+    argocd_values_path: "{{ argocd_stage_dir }}/values.yaml"
+    argocd_policy_path: "{{ argocd_stage_dir }}/cilium-policy.yaml"
+    argocd_projects_dir: "{{ argocd_stage_dir }}/projects"
+    argocd_apps_dir: "{{ argocd_stage_dir }}/apps"
+
+  tasks:
+    - name: Create the Argo CD staging directory
+      ansible.builtin.file:
+        path: "{{ argocd_stage_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Stage the Argo CD Cilium network policy
+      ansible.builtin.copy:
+        src: ../../platform/cilium/manifests/argocd.yaml
+        dest: "{{ argocd_policy_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Stage the reviewed Argo CD values
+      ansible.builtin.copy:
+        src: ../../platform/argocd/values.yaml
+        dest: "{{ argocd_values_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    # A trailing slash copies the directory's contents, not the directory.
+    - name: Stage the AppProjects and Applications
+      ansible.builtin.copy:
+        src: "../../platform/argocd/{{ item }}/"
+        dest: "{{ argocd_stage_dir }}/{{ item }}/"
+        owner: root
+        group: root
+        mode: "0644"
+        directory_mode: "0755"
+      loop:
+        - projects
+        - apps
+
+    - name: Check if the Argo CD namespace exists
+      ansible.builtin.command:
+        cmd: "kubectl get namespace {{ argocd_namespace }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: argocd_ns
+      failed_when: false
+      changed_when: false
+
+    - name: Create the Argo CD namespace if missing
+      ansible.builtin.command:
+        cmd: "kubectl create namespace {{ argocd_namespace }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: argocd_ns.rc != 0
+      changed_when: true
+
+    - name: Apply the Argo CD Cilium network policy
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ argocd_policy_path }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: policy_apply
+      changed_when: "'created' in policy_apply.stdout or 'configured' in policy_apply.stdout"
+
+    - name: Deploy or upgrade Argo CD via Helm
+      kubernetes.core.helm:
+        binary_path: "{{ helm_binary }}"
+        name: argocd
+        chart_ref: argo-cd
+        chart_repo_url: https://argoproj.github.io/argo-helm
+        chart_version: "{{ argo_cd_chart_version }}"
+        release_namespace: "{{ argocd_namespace }}"
+        create_namespace: false
+        kubeconfig: /etc/kubernetes/admin.conf
+        values_files:
+          - "{{ argocd_values_path }}"
+        wait: true
+        timeout: "10m"
+
+    - name: Wait for the Argo CD CRDs to be established
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=Established --timeout=60s
+          crd/applications.argoproj.io crd/appprojects.argoproj.io
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    - name: Apply the AppProjects
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ argocd_projects_dir }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: projects_apply
+      changed_when: "'created' in projects_apply.stdout or 'configured' in projects_apply.stdout"
+
+    - name: Apply the Applications
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ argocd_apps_dir }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: apps_apply
+      changed_when: "'created' in apps_apply.stdout or 'configured' in apps_apply.stdout"

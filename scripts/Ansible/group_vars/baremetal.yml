@@ -1,0 +1,9 @@
+---
+# Settings for the bare-metal laptop workers only, loaded automatically by
+# Ansible for hosts in the [baremetal] inventory group.
+
+# CIS 3.1.2 "Ensure wireless interfaces are not available": the RHEL10-CIS role
+# runs `nmcli radio all off`. Wi-Fi is the laptops' only network link, so the
+# control would take the node off the cluster mid-play. See
+# vars/cis-exceptions.yml for the other CIS deviations.
+rhel10cis_rule_3_1_2: false
