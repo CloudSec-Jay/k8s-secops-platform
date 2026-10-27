@@ -1,0 +1,15 @@
+---
+# Application: lab-gateway, the wildcard Certificate, HTTPRoutes and
+# ReferenceGrants from platform/gateway-api/. The Gateway API CRDs stay with
+# scripts/Ansible/gateway-api-setup.yaml, next to the Cilium upgrade that
+# enables the controller.
+#
+# TODO: write an argoproj.io/v1alpha1 Application named "gateway-api":
+#
+#   source            This repo, path platform/gateway-api. The folder also
+#                     holds README.md; does a directory source skip it?
+#   destination       The manifests set their own namespaces.
+#   dependencies      The Certificate needs lab-ca-issuer from the
+#                     cert-manager app. What does Argo CD show if this app
+#                     syncs first, and does it fix itself later?
+#   syncPolicy        Manual for now.

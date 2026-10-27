@@ -1,0 +1,21 @@
+---
+# AppProject for the platform Applications in ../apps/. A project is Argo CD's
+# security boundary: an Application can only deploy what its project allows.
+#
+# TODO: write an argoproj.io/v1alpha1 AppProject named "platform" in the
+# argocd namespace
+# (https://argo-cd.readthedocs.io/en/stable/user-guide/projects/):
+#
+#   sourceRepos       Only this repo and the exact Helm chart repos the apps
+#                     use. Never "*".
+#   destinations      Only the in-cluster server, and only the namespaces the
+#                     four apps deploy into. Which namespaces are those?
+#   clusterResourceWhitelist
+#                     The cluster-scoped kinds the apps really need (for
+#                     example CiliumClusterwideNetworkPolicy, ClusterIssuer,
+#                     APIService). List them by group and kind.
+#   clusterResourceBlacklist / namespaceResourceBlacklist
+#                     Consider denying ClusterRoleBinding outside what the
+#                     charts need. What attack path does that close?
+#
+# Check: why is the built-in "default" project a bad choice here?

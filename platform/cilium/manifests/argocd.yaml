@@ -1,0 +1,50 @@
+---
+# Allow rules for the argocd namespace under the cluster default deny.
+# Ansible applies this before installing Argo CD; after that the
+# cilium-policies Application manages it.
+#
+# TODO: write CiliumNetworkPolicy objects in namespace argocd. Base the
+# flows on Hubble (`hubble observe -n argocd --verdict DROPPED`), not guesses:
+#
+#   ingress           Between Argo CD's own pods (server, repo-server,
+#                     application-controller, redis). Which ports?
+#   egress            kube-apiserver (toEntities), cluster DNS, and GitHub
+#                     over 443 by FQDN only (toFQDNs plus a DNS rule
+#                     allowing that name), like the Wazuh CTI egress in
+#                     wazuh.yaml. Also the Helm chart repos the apps use.
+#   later             Ingress from the Gateway (fromEntities: ingress) once
+#                     argocd-server gets an HTTPRoute.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: argocd
+  namespace: cert-manager
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: cert-manager
+    - fromEntities:
+        - argo-repo-sever
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY

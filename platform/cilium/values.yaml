@@ -24,6 +24,9 @@ ipam:
 l2announcements:
   enabled: true
 
+gatewayAPI:
+  enabled: true
+
 rollOutCiliumPods: true
 
 securityContext:

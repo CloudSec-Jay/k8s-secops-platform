@@ -1,0 +1,18 @@
+---
+# Application: Cilium network policies, LB-IPAM pool and L2 announcement policy
+# from platform/cilium/manifests/. Cilium itself stays with Ansible.
+#
+# TODO: write an argoproj.io/v1alpha1 Application named "cilium-policies"
+# (https://argo-cd.readthedocs.io/en/stable/user-guide/application-specification/):
+#
+#   project           platform
+#   source            repoURL https://github.com/CloudSec-Jay/k8s-secops-platform.git,
+#                     a targetRevision (which branch or tag?), and
+#                     path platform/cilium/manifests
+#   destination       The in-cluster API server. These manifests set their own
+#                     namespaces, so which namespace goes here, if any?
+#   syncPolicy        Leave out "automated" for now: sync by hand and read the
+#                     diff first.
+#
+# Think first: this directory also holds the policy that allows Argo CD's own
+# traffic. What happens if a sync breaks it, and how would you recover?
